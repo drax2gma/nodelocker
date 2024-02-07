@@ -1,10 +1,17 @@
-package shared
+package util
 
 import (
 	"crypto/sha1"
 	"fmt"
 	"log"
 	"time"
+)
+
+var (
+	LockDataSUBJECT string // host:xxx || env:xxx
+	LockDataSTATE   string // 'locked', 'maintenance' or 'terminated' (latter by admin only)
+	LockDataOWNER   string // username
+	LockDataEXPIRE  string // last day for the lock in YYYYMMDD format
 )
 
 // Crypt a plain string into sha1 hash string
