@@ -1,4 +1,4 @@
-package util
+package x
 
 import (
 	"crypto/ecdsa"
@@ -117,7 +117,7 @@ func ServeTLS(r *chi.Mux) {
 
 	// Create a server with TLS configuration
 	server := &http.Server{
-		Addr:         "0.0.0.0:8443",
+		Addr:         "0.0.0.0:3000",
 		Handler:      r,
 		TLSConfig:    &tls.Config{Certificates: []tls.Certificate{tlsCert}},
 		ReadTimeout:  5 * time.Second,

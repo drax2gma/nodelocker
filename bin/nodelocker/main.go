@@ -12,16 +12,8 @@ import (
 
 	"github.com/go-redis/redis"
 
-	util "github.com/drax2gma/nodelocker/internal"
+	x "github.com/drax2gma/nodelocker/internal"
 )
-
-type JsonResponseType struct {
-	Type   string `json:"type"`
-	Name   string `json:"name"`
-	State  string `json:"state"`
-	Owner  string `json:"owner"`
-	Expire string `json:"expire"`
-}
 
 const (
 	C_OK         string = "OK"
@@ -29,156 +21,184 @@ const (
 	C_NIL        string = "NIL"
 	C_LOCK       string = "locked"
 	C_RespHeader string = "application/json"
+	C_Secret     string = "XXXXXXX"
 
-	C_ERR_JsonConvertData string = "ERR: Error converting LockData to JSON"
-	C_ERR_NoNameSpecified string = "ERR: No 'name' parameter specified."
-	C_ERR_NoTypeSpecified string = "ERR: No 'type' parameter specified."
-	C_ERR_IllegalUser     string = "ERR: Illegal user."
-	C_ERR_EnvLockFail     string = "ERR: Env lock unsuccesful."
+	C_ERR_JsonConvertData      string = "ERR: Error converting LockData to JSON."
+	C_ERR_NoNameSpecified      string = "ERR: No 'name' parameter specified."
+	C_ERR_NoTypeSpecified      string = "ERR: No 'type' parameter specified."
+	C_ERR_WrongTypeSpecified   string = "ERR: Wrong 'type' specified, must be 'env' or 'host'."
+	C_ERR_IllegalUser          string = "ERR: Illegal user."
+	C_ERR_EnvLockFail          string = "ERR: Env lock unsuccesful."
+	C_ERR_InvalidDateSpecified string = "ERR: Invalid 'lastday' specified, format is: YYYYMMDD."
+
+	C_TLS bool = true // serve TLS with self-signed cert?
 )
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 
-	var jsonRes JsonResponseType
+	var webResponse x.JsonDataType
+	var httpErrorCode int = 0
 
-	subjectType := r.URL.Query().Get("type") // 'env' or 'host'
-	subjectName := r.URL.Query().Get("name") // name of env or host
+	x.ResetWebResponse(&webResponse)
 
-	if subjectName == "" {
-		// only one parameter allowed, not host and env in the same time
-		fmt.Println("-name")
-		http.Error(w, C_ERR_NoNameSpecified, http.StatusBadRequest)
-		return
+	x.CacheData.Type = r.URL.Query().Get("type") // type of entity, 'env' or 'host'
+	x.CacheData.Name = r.URL.Query().Get("name") // name of entity
+
+	if x.CacheData.Type == "" { // no 'type' defined in GET request
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_NoTypeSpecified
 	}
 
-	if subjectType == "" {
-		// only one parameter allowed, not host and env in the same time
-		fmt.Println("-type")
-		http.Error(w, C_ERR_NoTypeSpecified, http.StatusBadRequest)
-		return
+	if x.CacheData.Type != "env" && x.CacheData.Type != "host" { // bad 'type' defined in GET request
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_WrongTypeSpecified
 	}
 
-	util.LockDataSUBJECT = fmt.Sprintf("%s:%s", subjectType, subjectName)
+	if x.CacheData.Name == "" { // no 'name' defined in GET request
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_NoNameSpecified
+	}
 
-	if util.RedisGetLockData() { // got some data on subject
+	if httpErrorCode == 0 { // GET params were good
 
-		w.Header().Set("Content-Type", C_RespHeader)
-
-		jsonRes.Type = subjectType
-		jsonRes.Name = subjectName
-		jsonRes.State = util.LockDataSTATE
-
-		byteData, err := json.Marshal(jsonRes)
-		if err != nil {
-			http.Error(w, C_ERR_JsonConvertData, http.StatusInternalServerError)
-			return
+		if x.RGetLockData() {
+			// got some data on entity from lock database
+			webResponse.State = x.CacheData.State
+			webResponse.User = x.CacheData.User
+		} else {
+			// no lock data on entity
+			webResponse.State = "unlocked"
+			webResponse.User = ""
 		}
 
-		/* trunk-ignore(golangci-lint/errcheck) */
-		w.Write(byteData)
+		webResponse.Success = true
+		webResponse.Message = ""
+		webResponse.Type = x.CacheData.Type
+		webResponse.Name = x.CacheData.Name
 
-	} else { // no lock data on subject
+	} else { // GET params were problametic a bit
 
 		w.Header().Set("Content-Type", C_RespHeader)
-
-		jsonRes.Type = subjectType
-		jsonRes.Name = subjectName
-		jsonRes.State = "unlocked"
-
-		byteData, err := json.Marshal(jsonRes)
-		if err != nil {
-			http.Error(w, C_ERR_JsonConvertData, http.StatusInternalServerError)
-			return
-		}
-
-		/* trunk-ignore(golangci-lint/errcheck) */
-		w.Write(byteData)
-	}
-}
-
-func lockHandler(w http.ResponseWriter, r *http.Request) {
-
-	var httpResponse string
-
-	subjectName := r.URL.Query().Get("subject")
-	subjectType := r.URL.Query().Get("type")
-	lastDay := r.URL.Query().Get("lastday")
-	userName := r.URL.Query().Get("user")
-	userToken := r.URL.Query().Get("token")
-
-	if subjectName == "" {
-		// only one parameter allowed, not host and env in the same time
-		fmt.Println("-name")
-		http.Error(w, C_ERR_NoNameSpecified, http.StatusBadRequest)
-		return
+		w.WriteHeader(httpErrorCode)
 	}
 
-	if subjectType == "" {
-		// only one parameter allowed, not host and env in the same time
-		fmt.Println("-type")
-		http.Error(w, C_ERR_NoTypeSpecified, http.StatusBadRequest)
-		return
-	}
-
-	if !util.RedisValidUser(userName, userToken) {
-		fmt.Println("-user")
-		http.Error(w, C_ERR_IllegalUser, http.StatusForbidden)
-		return
-	}
-
-	if !util.RedisSet(subjectType+":"+subjectName, "state", C_LOCK, util.GetTimeFromNow(lastDay)) {
-		http.Error(w, C_ERR_EnvLockFail, http.StatusBadRequest)
-		return
-	}
-
-	if !util.RedisSet(subjectType+":"+subjectName, "owner", userName, util.GetTimeFromNow(lastDay)) {
-		http.Error(w, C_ERR_EnvLockFail, http.StatusBadRequest)
-		return
-	}
-
-	if !util.RedisSet(subjectType+":"+subjectName, "expire", lastDay, util.GetTimeFromNow(lastDay)) {
-		http.Error(w, C_ERR_EnvLockFail, http.StatusBadRequest)
+	byteData, err := json.MarshalIndent(webResponse, "", "    ")
+	if err != nil {
+		http.Error(w, C_ERR_JsonConvertData, http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", C_RespHeader)
 	/* trunk-ignore(golangci-lint/errcheck) */
-	w.Write([]byte(string(httpResponse)))
+	w.Write(byteData)
+}
+
+func lockHandler(w http.ResponseWriter, r *http.Request) {
+
+	var webResponse x.JsonDataType
+	var httpErrorCode int = 0
+
+	x.ResetWebResponse(&webResponse)
+
+	x.CacheData.Type = r.URL.Query().Get("type")
+	x.CacheData.Name = r.URL.Query().Get("entity")
+	x.CacheData.LastDay = r.URL.Query().Get("lastday")
+	x.CacheData.User = r.URL.Query().Get("user")
+	x.CacheData.Token = r.URL.Query().Get("token")
+
+	if x.CacheData.Type == "" { // no 'type' defined in GET request
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_NoTypeSpecified
+	} else if x.CacheData.Type != "env" && x.CacheData.Type != "host" { // bad 'type' defined in GET request
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_WrongTypeSpecified
+	} else if x.CacheData.Name == "" { // no 'name' defined in GET request
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_NoNameSpecified
+	}
+
+	if !x.IsValidDate(x.CacheData.LastDay) {
+		// Is given LASTDAY is a valid date?
+		webResponse.LastDay = x.CacheData.LastDay
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_InvalidDateSpecified
+
+	} else if !x.RValidUser(x.CacheData.User, x.CacheData.Token) {
+		// Is given user valid against DB user? Pwd checking too.
+		httpErrorCode, webResponse.Message = http.StatusForbidden, C_ERR_IllegalUser
+	}
+
+	if !x.RSetSingle(x.C_CacheData, "state", C_LOCK, x.GetTimeFromNow(x.CacheData.LastDay)) {
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_EnvLockFail
+
+	} else if !x.RSetSingle(x.C_CacheData, "user", x.CacheData.User, x.GetTimeFromNow(x.CacheData.LastDay)) {
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_EnvLockFail
+
+	} else if !x.RSetSingle(x.C_CacheData, "lastday", x.CacheData.LastDay, x.GetTimeFromNow(x.CacheData.LastDay)) {
+		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_EnvLockFail
+	}
+
+	if httpErrorCode == 0 { // GET params were good
+
+		if x.RGetLockData() {
+			// got some data on entity from lock database
+			webResponse.State = x.CacheData.State
+			webResponse.User = x.CacheData.User
+		} else {
+			// no lock data on entity
+			webResponse.State = "unlocked"
+			webResponse.User = ""
+		}
+
+		webResponse.Success = true
+		webResponse.Message = ""
+		webResponse.Type = x.CacheData.Type
+		webResponse.Name = x.CacheData.Name
+
+	} else { // GET params were problametic a bit
+
+		w.Header().Set("Content-Type", C_RespHeader)
+		w.WriteHeader(httpErrorCode)
+	}
+
+	byteData, err := json.MarshalIndent(webResponse, "", "    ")
+	if err != nil {
+		http.Error(w, C_ERR_JsonConvertData, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", C_RespHeader)
+	/* trunk-ignore(golangci-lint/errcheck) */
+	w.Write(byteData)
 }
 
 func unlockHandler(w http.ResponseWriter, r *http.Request) {
 
 	var httpResponse string
 
-	subjectName := r.URL.Query().Get("subject")
-	subjectType := r.URL.Query().Get("type")
+	entityName := r.URL.Query().Get("entity")
+	entityType := r.URL.Query().Get("type")
 	userName := r.URL.Query().Get("user")
 	userToken := r.URL.Query().Get("token")
 
-	if subjectName == "" {
+	if entityName == "" {
 		// only one parameter allowed, not host and env in the same time
 		fmt.Println("+host+env")
-		http.Error(w, "ERR: No 'subject' (host or env name) specified.", http.StatusBadRequest)
+		http.Error(w, "ERR: No 'entity' (host or env name) specified.", http.StatusBadRequest)
 		return
 	}
 
-	if subjectType == "" {
+	if entityType == "" {
 		// only one parameter allowed, not host and env in the same time
 		fmt.Println("-host-env")
-		http.Error(w, "ERR: No 'type' of subject specified.", http.StatusBadRequest)
+		http.Error(w, "ERR: No 'type' of entity specified.", http.StatusBadRequest)
 		return
 	}
 
-	if !util.RedisValidUser(userName, userToken) {
+	if !x.RValidUser(userName, userToken) {
 		http.Error(w, "Illegal user.", http.StatusForbidden)
 		return
 	}
 
 	// UNLOCK function
-	util.LockDataSUBJECT = subjectType + ":" + subjectName
+	x.CacheData.Type = entityType
+	x.CacheData.Name = entityName
 
-	util.RedisDelete()
-	httpResponse = fmt.Sprintf("'%s:%s' unlocked successfully by %s.", subjectType, subjectName, userName)
+	x.REntityDelete()
+	httpResponse = fmt.Sprintf("'%s:%s' unlocked successfully by %s.", entityType, entityName, userName)
 
 	w.Header().Set("Content-Type", C_RespHeader)
 	/* trunk-ignore(golangci-lint/errcheck) */
@@ -206,14 +226,14 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 	// new user password into DB = sha1(sha1("USERNAME@nodelocker"))
 	// register
 
-	existingUser := util.RedisGet("user", userName)
+	existingUser := x.RGetSingle("user", userName)
 
 	if existingUser != nil {
 		http.Error(w, "User already created.", http.StatusForbidden)
 		return
 	}
 
-	if !util.RedisSet("user", userName, userToken, 0) {
+	if !x.RSetSingle("user", userName, userToken, 0) {
 		http.Error(w, "ERR: User setup failed.", http.StatusBadRequest)
 		return
 	} else {
@@ -228,21 +248,21 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 	var paramResult string
 
 	adminToken := r.URL.Query().Get("token")
-	subject := r.URL.Query().Get("subject")
+	entity := r.URL.Query().Get("entity")
 	action := r.URL.Query().Get("action")
 
 	if adminToken == "" {
 		paramResult = "Missing 'token' parameter"
 	}
 
-	if subject == "user" {
+	if entity == "user" {
 		if action == "purge" {
 
 		} else {
 			paramResult = "ERR: Illegal 'action' parameter"
 		}
 
-	} else if subject == "env" {
+	} else if entity == "env" {
 		if action == "create" {
 
 		} else if action == "unlock" {
@@ -253,7 +273,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 			paramResult = "ERR: Illegal 'action' parameter"
 		}
 
-	} else if subject == "host" {
+	} else if entity == "host" {
 		if action == "unlock" {
 
 		} else if action == "terminate" {
@@ -263,7 +283,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 	} else {
-		paramResult = "ERR: Illegal 'subject' parameter"
+		paramResult = "ERR: Illegal 'entity' parameter"
 	}
 
 	http.Error(w, paramResult, http.StatusBadRequest)
@@ -272,13 +292,13 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	util.RConn = redis.NewClient(&redis.Options{
+	x.RConn = redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "",
 		DB:       1,
 	})
 
-	errDb := util.RConn.Ping().Err()
+	errDb := x.RConn.Ping().Err()
 	if errDb == nil {
 		fmt.Println("✅ Redis check OK")
 	} else {
@@ -298,5 +318,12 @@ func main() {
 
 	http.Handle("/", r)
 
-	util.ServeTLS(r)
+	if C_TLS {
+		x.ServeTLS(r)
+	} else {
+		err := http.ListenAndServe("0.0.0.0:3000", r)
+		if err != nil {
+			log.Fatal("ListenAndServe: ", err)
+		}
+	}
 }

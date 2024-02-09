@@ -1,101 +1,97 @@
-package util
+package x
 
 import (
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/go-redis/redis"
 )
 
-const (
-	C_SUBJECT = "subject"
-	C_STATE   = "state"
-	C_OWNER   = "owner"
-	C_EXPIRE  = "expire"
-)
-
 var (
-	RConn             *redis.Client // global Redis connection
-	RedisLastErrorMsg string        // Storage for the last Redis error for debug
+	RConn         *redis.Client // global Redis connection
+	RLastErrorMsg string        // Storage for the last Redis error for debug
 )
 
-func RedisGet(key string, field string) any {
+func RGetSingle(key string, field string) any {
 	// In this function we use 'nil' as false return value
 	// if something gone wrong
 
 	value, err := RConn.HGet(key, field).Result()
 	if err != nil || value == "" {
-		RedisLastErrorMsg = "ERR: No value"
+		RLastErrorMsg = "ERR: No value"
 		return nil
 	}
 
 	return value
 }
 
-func RedisSet(key string, field string, value any, expire time.Duration) bool {
+func RSetSingle(key string, field string, value any, lastDay time.Duration) bool {
+
+	if key == C_CacheData {
+		key = CacheData.Type + ":" + CacheData.Name
+	}
 
 	err := RConn.HSet(key, field, value).Err()
 
 	if err != nil {
-		RedisLastErrorMsg = "ERR: SET failed"
+		RLastErrorMsg = "ERR: SET failed"
 		return false
 	}
 
-	errExp := RConn.Expire(key, expire).Err()
+	errExp := RConn.Expire(key, lastDay).Err()
 	if errExp != nil {
-		RedisLastErrorMsg = "ERR: EXPIRE set failed"
+		RLastErrorMsg = "ERR: EXPIRE set failed"
 		return false
 	}
 
 	return true
 }
 
-func RedisGetLockData() bool {
+// Do not forget to fill util.CacheData before function call!
+func RGetLockData() bool {
 
 	var resultsMap map[string]string
 
-	result, err := RConn.HMGet(LockDataSUBJECT, C_STATE, C_OWNER, C_EXPIRE).Result()
+	result, err := RConn.HMGet(CacheData.Type+":"+CacheData.Name, "state", "user", "lastday").Result()
 	if err != nil || result[0] == nil {
-		RedisLastErrorMsg = "ERR: HMGet failed, empty result."
+		RLastErrorMsg = "ERR: HMGet failed, empty result."
 		return false
 	}
 
-	fmt.Println(result, err)
-
-	fields := []string{C_STATE, C_OWNER, C_EXPIRE}
+	fields := []string{"state", "user", "lastday"}
 	resultsMap = make(map[string]string)
 
 	for i, field := range fields {
 		resultsMap[field] = result[i].(string)
 	}
 
-	LockDataSTATE = resultsMap[C_STATE]
-	LockDataOWNER = resultsMap[C_OWNER]
-	LockDataEXPIRE = resultsMap[C_EXPIRE]
+	CacheData.State = resultsMap["state"]
+	CacheData.User = resultsMap["user"]
+	CacheData.LastDay = resultsMap["lastday"]
 
 	return true
 }
 
-func RedisSetLockData() bool {
+// Do not forget to fill util.CacheData before function call!
+func RSetLockData() bool {
 
-	err := RConn.HMSet(LockDataSUBJECT, map[string]interface{}{
-		C_STATE:  LockDataSTATE,
-		C_OWNER:  LockDataOWNER,
-		C_EXPIRE: LockDataEXPIRE,
+	err := RConn.HMSet(CacheData.Type+":"+CacheData.Name, map[string]interface{}{
+		"state":   CacheData.State,
+		"user":    CacheData.User,
+		"lastday": CacheData.LastDay,
 	}).Err()
 
 	if err != nil {
-		RedisLastErrorMsg = "ERR: HMSet failed"
+		RLastErrorMsg = "ERR: HMSet failed"
 		return false
 	}
 
 	return true
 }
 
-func RedisDelete() bool {
+func REntityDelete() bool {
 
-	err := RConn.Del(LockDataSUBJECT).Err()
+	err := RConn.Del(CacheData.Type + ":" + CacheData.Name).Err()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -103,26 +99,24 @@ func RedisDelete() bool {
 	return true
 }
 
-func RedisLog(msg string) bool {
-
-	var maxLogLines int64 = 1000
+func RLog(msg string) bool {
 
 	err := RConn.RPush("log", msg).Err()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	// keeping log length in a sane interval
-	RConn.LTrim("log", 0, 0-maxLogLines)
+	// keeping log length in a sane interval (1000 lines)
+	RConn.LTrim("log", 0, -1000)
 
 	return true
 }
 
-func RedisValidUser(user string, token string) bool {
+func RValidUser(user string, token string) bool {
 
 	redisPwd, err := RConn.HGet("users", user).Result()
 	if err != nil || redisPwd == "" {
-		RedisLastErrorMsg = "ERR: Illegal user"
+		RLastErrorMsg = "ERR: Illegal user"
 		return false
 	}
 
