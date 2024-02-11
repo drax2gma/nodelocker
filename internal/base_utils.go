@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"slices"
 	"time"
 )
 
-type JsonDataType struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+type CacheDataType struct {
 	Type    string `json:"type"`
 	Name    string `json:"name"`
 	State   string `json:"state"`
@@ -19,11 +18,52 @@ type JsonDataType struct {
 	Token   string `json:"token"`
 }
 
+type WebResponseDataType struct {
+	Success  bool     `json:"success"`
+	Messages []string `json:"messages"`
+	Type     string   `json:"type"`
+	Name     string   `json:"name"`
+	State    string   `json:"state"`
+	LastDay  string   `json:"lastday"`
+	User     string   `json:"user"`
+}
+
+type StatusRespType struct {
+	Success  bool     `json:"success"`
+	Messages []string `json:"messages"`
+}
+
 const (
-	C_CacheData string = "(cached)"
+	C_UseCacheData string = "(cached)"
+	C_USER_Valid   string = "valid"
+	C_USER_Exists  string = "exists"
 )
 
-var CacheData JsonDataType // temp manipulation of data fields
+var CacheData CacheDataType // temp manipulation of data fields
+
+func ResetWebResponse(r *WebResponseDataType) {
+	r.Type = ""
+	r.Name = ""
+	r.State = ""
+	r.LastDay = ""
+	r.User = ""
+	r.Success = false
+	r.Messages = []string{}
+}
+
+func ResetCacheData(c *CacheDataType) {
+	c.Type = ""
+	c.Name = ""
+	c.State = ""
+	c.LastDay = ""
+	c.User = ""
+	c.Token = ""
+}
+
+func ResetStatusResponse(r *StatusRespType) {
+	r.Success = false
+	r.Messages = []string{}
+}
 
 // Crypt a plain string into sha1 hash string
 func CryptString(plain string) string {
@@ -33,15 +73,6 @@ func CryptString(plain string) string {
 	sha1Hash := h.Sum(nil)
 	hexString := fmt.Sprintf("%x", sha1Hash)
 	return hexString
-}
-
-func ResetWebResponse(res *JsonDataType) {
-	res.Type = ""
-	res.Name = ""
-	res.State = ""
-	res.User = ""
-	res.Success = false
-	res.Message = "ERR: Unexpected error."
 }
 
 func GetTimeFromNow(yyyymmdd string) time.Duration {
@@ -95,4 +126,11 @@ func IsValidDate(dateParam string) bool {
 	}
 
 	return true
+}
+
+func IsValidEntityType(t string) bool {
+
+	validTypes := []string{"env", "host"}
+	return slices.Contains(validTypes, t)
+
 }

@@ -26,8 +26,12 @@ const (
 	C_ERR_JsonConvertData      string = "ERR: Error converting LockData to JSON."
 	C_ERR_NoNameSpecified      string = "ERR: No 'name' parameter specified."
 	C_ERR_NoTypeSpecified      string = "ERR: No 'type' parameter specified."
+	C_ERR_NoUserSpecified      string = "ERR: No 'user' parameter specified."
+	C_ERR_NoTokenSpecified     string = "ERR: No 'token' parameter specified."
 	C_ERR_WrongTypeSpecified   string = "ERR: Wrong 'type' specified, must be 'env' or 'host'."
 	C_ERR_IllegalUser          string = "ERR: Illegal user."
+	C_ERR_UserExists           string = "ERR: User already exists."
+	C_ERR_UserSetupFailed      string = "ERR: User setup failed."
 	C_ERR_EnvLockFail          string = "ERR: Env lock unsuccesful."
 	C_ERR_InvalidDateSpecified string = "ERR: Invalid 'lastday' specified, format is: YYYYMMDD."
 
@@ -36,7 +40,7 @@ const (
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 
-	var webResponse x.JsonDataType
+	var webResponse x.WebResponseDataType
 	var httpErrorCode int = 0
 
 	x.ResetWebResponse(&webResponse)
@@ -44,16 +48,25 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	x.CacheData.Type = r.URL.Query().Get("type") // type of entity, 'env' or 'host'
 	x.CacheData.Name = r.URL.Query().Get("name") // name of entity
 
-	if x.CacheData.Type == "" { // no 'type' defined in GET request
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_NoTypeSpecified
+	// no 'type' defined in GET request
+	if x.CacheData.Type == "" {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_NoTypeSpecified)
 	}
 
-	if x.CacheData.Type != "env" && x.CacheData.Type != "host" { // bad 'type' defined in GET request
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_WrongTypeSpecified
+	// bad 'type' defined in GET request
+	if x.CacheData.Type != "env" && x.CacheData.Type != "host" {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_WrongTypeSpecified)
 	}
 
-	if x.CacheData.Name == "" { // no 'name' defined in GET request
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_NoNameSpecified
+	// no 'name' defined in GET request
+	if x.CacheData.Name == "" {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_NoNameSpecified)
 	}
 
 	if httpErrorCode == 0 { // GET params were good
@@ -69,7 +82,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		webResponse.Success = true
-		webResponse.Message = ""
+		webResponse.Messages = []string{"valid_response"}
 		webResponse.Type = x.CacheData.Type
 		webResponse.Name = x.CacheData.Name
 
@@ -92,43 +105,71 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 
 func lockHandler(w http.ResponseWriter, r *http.Request) {
 
-	var webResponse x.JsonDataType
+	var webResponse x.WebResponseDataType
 	var httpErrorCode int = 0
 
 	x.ResetWebResponse(&webResponse)
 
 	x.CacheData.Type = r.URL.Query().Get("type")
-	x.CacheData.Name = r.URL.Query().Get("entity")
+	x.CacheData.Name = r.URL.Query().Get("name")
 	x.CacheData.LastDay = r.URL.Query().Get("lastday")
 	x.CacheData.User = r.URL.Query().Get("user")
 	x.CacheData.Token = r.URL.Query().Get("token")
 
-	if x.CacheData.Type == "" { // no 'type' defined in GET request
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_NoTypeSpecified
-	} else if x.CacheData.Type != "env" && x.CacheData.Type != "host" { // bad 'type' defined in GET request
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_WrongTypeSpecified
-	} else if x.CacheData.Name == "" { // no 'name' defined in GET request
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_NoNameSpecified
+	// no 'type' defined in GET request
+	if x.CacheData.Type == "" {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_NoTypeSpecified)
 	}
 
+	// bad 'type' defined in GET request
+	if !x.IsValidEntityType(x.CacheData.Type) {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_WrongTypeSpecified)
+	}
+
+	// no 'name' defined in GET request
+	if x.CacheData.Name == "" {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_NoNameSpecified)
+	}
+
+	// Is given LASTDAY is a valid date?
 	if !x.IsValidDate(x.CacheData.LastDay) {
-		// Is given LASTDAY is a valid date?
-		webResponse.LastDay = x.CacheData.LastDay
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_InvalidDateSpecified
 
-	} else if !x.RValidUser(x.CacheData.User, x.CacheData.Token) {
-		// Is given user valid against DB user? Pwd checking too.
-		httpErrorCode, webResponse.Message = http.StatusForbidden, C_ERR_IllegalUser
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_InvalidDateSpecified)
 	}
 
-	if !x.RSetSingle(x.C_CacheData, "state", C_LOCK, x.GetTimeFromNow(x.CacheData.LastDay)) {
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_EnvLockFail
+	// Is given user valid against DB user? Pwd checking too.
+	if !x.RCheckUser(x.C_USER_Valid, x.CacheData.User, x.CacheData.Token) {
 
-	} else if !x.RSetSingle(x.C_CacheData, "user", x.CacheData.User, x.GetTimeFromNow(x.CacheData.LastDay)) {
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_EnvLockFail
+		httpErrorCode = http.StatusForbidden
+		webResponse.Messages = append(webResponse.Messages, C_ERR_IllegalUser)
+	}
 
-	} else if !x.RSetSingle(x.C_CacheData, "lastday", x.CacheData.LastDay, x.GetTimeFromNow(x.CacheData.LastDay)) {
-		httpErrorCode, webResponse.Message = http.StatusBadRequest, C_ERR_EnvLockFail
+	//
+	if !x.RSetSingle(x.C_UseCacheData, "state", C_LOCK, x.GetTimeFromNow(x.CacheData.LastDay)) {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_EnvLockFail)
+	}
+
+	//
+	if !x.RSetSingle(x.C_UseCacheData, "user", x.CacheData.User, x.GetTimeFromNow(x.CacheData.LastDay)) {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_EnvLockFail)
+	}
+
+	//
+	if !x.RSetSingle(x.C_UseCacheData, "lastday", x.CacheData.LastDay, x.GetTimeFromNow(x.CacheData.LastDay)) {
+
+		httpErrorCode = http.StatusBadRequest
+		webResponse.Messages = append(webResponse.Messages, C_ERR_EnvLockFail)
 	}
 
 	if httpErrorCode == 0 { // GET params were good
@@ -144,7 +185,7 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		webResponse.Success = true
-		webResponse.Message = ""
+		webResponse.Messages = []string{"valid_response"}
 		webResponse.Type = x.CacheData.Type
 		webResponse.Name = x.CacheData.Name
 
@@ -188,7 +229,7 @@ func unlockHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !x.RValidUser(userName, userToken) {
+	if !x.RCheckUser(x.C_USER_Valid, userName, userToken) {
 		http.Error(w, "Illegal user.", http.StatusForbidden)
 		return
 	}
@@ -208,38 +249,61 @@ func unlockHandler(w http.ResponseWriter, r *http.Request) {
 
 func regHandler(w http.ResponseWriter, r *http.Request) {
 
+	var statusResponse x.StatusRespType
+	var httpErrorCode int = 0
+
+	x.ResetStatusResponse(&statusResponse)
+
 	userName := r.URL.Query().Get("user")
 	userToken := r.URL.Query().Get("token")
 
+	// no 'user' defined in GET request
 	if userName == "" {
-		http.Error(w, "Missing 'user' parameter", http.StatusBadRequest)
-		return
+
+		httpErrorCode = http.StatusBadRequest
+		statusResponse.Messages = append(statusResponse.Messages, C_ERR_NoUserSpecified)
 	}
 
+	// no 'token' defined in GET request
 	if userToken == "" {
-		http.Error(w, "Missing 'token' parameter", http.StatusBadRequest)
-		return
+
+		httpErrorCode = http.StatusBadRequest
+		statusResponse.Messages = append(statusResponse.Messages, C_ERR_NoTokenSpecified)
 	}
 
-	// req: user+token
-	// check if user exists, if yes, exit
-	// new user password into DB = sha1(sha1("USERNAME@nodelocker"))
-	// register
+	if x.RCheckUser("existing", userName, "") {
 
-	existingUser := x.RGetSingle("user", userName)
-
-	if existingUser != nil {
-		http.Error(w, "User already created.", http.StatusForbidden)
-		return
+		httpErrorCode = http.StatusForbidden
+		statusResponse.Messages = append(statusResponse.Messages, C_ERR_UserExists)
 	}
 
 	if !x.RSetSingle("user", userName, userToken, 0) {
-		http.Error(w, "ERR: User setup failed.", http.StatusBadRequest)
-		return
+
+		httpErrorCode = http.StatusInternalServerError
+		statusResponse.Messages = append(statusResponse.Messages, C_ERR_UserSetupFailed)
+
+	}
+
+	if httpErrorCode == 0 {
+
+		statusResponse.Success = true
+		statusResponse.Messages = []string{"OK: User created."}
+
 	} else {
-		http.Error(w, "OK: User setup done.", http.StatusAccepted)
+
+		w.Header().Set("Content-Type", C_RespHeader)
+		w.WriteHeader(httpErrorCode)
+	}
+
+	byteData, err := json.MarshalIndent(statusResponse, "", "    ")
+	if err != nil {
+		http.Error(w, C_ERR_JsonConvertData, http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", C_RespHeader)
+	/* trunk-ignore(golangci-lint/errcheck) */
+	w.Write(byteData)
 
 }
 
@@ -302,7 +366,7 @@ func main() {
 	if errDb == nil {
 		fmt.Println("✅ Redis check OK")
 	} else {
-		fmt.Println("❌ Redis not available, exitting...")
+		fmt.Println("❌ Redis is not available, exitting...")
 		log.Fatal(errDb.Error())
 	}
 

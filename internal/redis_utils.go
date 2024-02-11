@@ -8,17 +8,21 @@ import (
 )
 
 var (
-	RConn         *redis.Client // global Redis connection
-	RLastErrorMsg string        // Storage for the last Redis error for debug
+	RConn *redis.Client // global Redis connection
+
 )
 
 func RGetSingle(key string, field string) any {
-	// In this function we use 'nil' as false return value
-	// if something gone wrong
+
+	if key == C_UseCacheData {
+		key = CacheData.Type + ":" + CacheData.Name
+	}
 
 	value, err := RConn.HGet(key, field).Result()
 	if err != nil || value == "" {
-		RLastErrorMsg = "ERR: No value"
+
+		// In this function we use 'nil' as false return value
+		// if something gone wrong
 		return nil
 	}
 
@@ -27,34 +31,27 @@ func RGetSingle(key string, field string) any {
 
 func RSetSingle(key string, field string, value any, lastDay time.Duration) bool {
 
-	if key == C_CacheData {
+	if key == C_UseCacheData {
 		key = CacheData.Type + ":" + CacheData.Name
 	}
 
 	err := RConn.HSet(key, field, value).Err()
 
 	if err != nil {
-		RLastErrorMsg = "ERR: SET failed"
 		return false
 	}
 
 	errExp := RConn.Expire(key, lastDay).Err()
-	if errExp != nil {
-		RLastErrorMsg = "ERR: EXPIRE set failed"
-		return false
-	}
-
-	return true
+	return errExp == nil
 }
 
-// Do not forget to fill util.CacheData before function call!
+// Do not forget to fill x.CacheData before function call!
 func RGetLockData() bool {
 
 	var resultsMap map[string]string
 
 	result, err := RConn.HMGet(CacheData.Type+":"+CacheData.Name, "state", "user", "lastday").Result()
 	if err != nil || result[0] == nil {
-		RLastErrorMsg = "ERR: HMGet failed, empty result."
 		return false
 	}
 
@@ -72,7 +69,7 @@ func RGetLockData() bool {
 	return true
 }
 
-// Do not forget to fill util.CacheData before function call!
+// Do not forget to fill x.CacheData before function call!
 func RSetLockData() bool {
 
 	err := RConn.HMSet(CacheData.Type+":"+CacheData.Name, map[string]interface{}{
@@ -81,12 +78,7 @@ func RSetLockData() bool {
 		"lastday": CacheData.LastDay,
 	}).Err()
 
-	if err != nil {
-		RLastErrorMsg = "ERR: HMSet failed"
-		return false
-	}
-
-	return true
+	return err == nil
 }
 
 func REntityDelete() bool {
@@ -112,15 +104,26 @@ func RLog(msg string) bool {
 	return true
 }
 
-func RValidUser(user string, token string) bool {
+// chkType: C_USER_Exists or C_USER_Valid
+func RCheckUser(chkType string, userName string, userToken string) bool {
 
-	redisPwd, err := RConn.HGet("users", user).Result()
-	if err != nil || redisPwd == "" {
-		RLastErrorMsg = "ERR: Illegal user"
+	redisPwd, err := RConn.HGet("users", userName).Result()
+	if err != nil {
+
 		return false
+
+	} else {
+
+		if chkType == C_USER_Exists {
+
+			return true
+
+		} else if chkType == C_USER_Valid {
+
+			hashedPwd := CryptString(userToken)
+			return hashedPwd == redisPwd
+		}
 	}
 
-	hashedPwd := CryptString(token)
-
-	return hashedPwd == redisPwd
+	return false
 }
