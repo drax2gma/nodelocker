@@ -1,6 +1,6 @@
 module github.com/drax2gma/nodelocker
 
-go 1.21
+go 1.21.6
 
 require github.com/go-redis/redis v6.15.9+incompatible
 
