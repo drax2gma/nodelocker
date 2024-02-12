@@ -34,9 +34,11 @@ type StatusRespType struct {
 }
 
 const (
-	C_UseCacheData string = "(cached)"
-	C_USER_Valid   string = "valid"
-	C_USER_Exists  string = "exists"
+	C_UseCacheData   string = "(cached)"
+	C_USER_Valid     string = "uv"
+	C_USER_Invalid   string = "ui"
+	C_USER_Exists    string = "ue"
+	C_USER_NotExists string = "un"
 )
 
 var CacheData CacheDataType // temp manipulation of data fields
@@ -132,5 +134,11 @@ func IsValidEntityType(t string) bool {
 
 	validTypes := []string{"env", "host"}
 	return slices.Contains(validTypes, t)
+
+}
+
+func CLog(msg string) {
+
+	fmt.Println(msg)
 
 }

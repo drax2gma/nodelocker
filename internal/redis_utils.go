@@ -36,12 +36,12 @@ func RSetSingle(key string, field string, value any, lastDay time.Duration) bool
 	}
 
 	err := RConn.HSet(key, field, value).Err()
+	return err == nil
+}
 
-	if err != nil {
-		return false
-	}
+func RSetExpire(key string, expire time.Duration) bool {
 
-	errExp := RConn.Expire(key, lastDay).Err()
+	errExp := RConn.Expire(key, expire).Err()
 	return errExp == nil
 }
 
@@ -91,39 +91,42 @@ func REntityDelete() bool {
 	return true
 }
 
-func RLog(msg string) bool {
-
-	err := RConn.RPush("log", msg).Err()
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	// keeping log length in a sane interval (1000 lines)
-	RConn.LTrim("log", 0, -1000)
-
-	return true
-}
-
 // chkType: C_USER_Exists or C_USER_Valid
-func RCheckUser(chkType string, userName string, userToken string) bool {
+// returns: C_USER_Exists, C_USER_NotExists, C_USER_Valid, C_USER_Invalid
+func RCheckUser(chkType string, userName string, userToken string) string {
 
-	redisPwd, err := RConn.HGet("users", userName).Result()
-	if err != nil {
+	CLog("Checking user: " + userName)
+	redisPwd, err := RConn.HGet("user", userName).Result()
 
-		return false
-
-	} else {
+	if err == nil { // found something
 
 		if chkType == C_USER_Exists {
 
-			return true
+			CLog(userName + " user found.")
+			return C_USER_Exists
 
 		} else if chkType == C_USER_Valid {
 
-			hashedPwd := CryptString(userToken)
-			return hashedPwd == redisPwd
+			if redisPwd == CryptString(userToken) {
+
+				CLog(userName + " user is valid.")
+				return C_USER_Valid
+
+			} else {
+
+				CLog(userName + " user is invalid.")
+				return C_USER_Invalid
+			}
+
+		} else {
+
+			CLog(userName + " user not found.")
+			return C_USER_NotExists
 		}
+
 	}
 
-	return false
+	// nothing in db
+	CLog(userName + " user not exists (redis error).")
+	return C_USER_NotExists
 }

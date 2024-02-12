@@ -23,17 +23,18 @@ const (
 	C_RespHeader string = "application/json"
 	C_Secret     string = "XXXXXXX"
 
-	C_ERR_JsonConvertData      string = "ERR: Error converting LockData to JSON."
-	C_ERR_NoNameSpecified      string = "ERR: No 'name' parameter specified."
-	C_ERR_NoTypeSpecified      string = "ERR: No 'type' parameter specified."
-	C_ERR_NoUserSpecified      string = "ERR: No 'user' parameter specified."
-	C_ERR_NoTokenSpecified     string = "ERR: No 'token' parameter specified."
-	C_ERR_WrongTypeSpecified   string = "ERR: Wrong 'type' specified, must be 'env' or 'host'."
-	C_ERR_IllegalUser          string = "ERR: Illegal user."
-	C_ERR_UserExists           string = "ERR: User already exists."
-	C_ERR_UserSetupFailed      string = "ERR: User setup failed."
-	C_ERR_EnvLockFail          string = "ERR: Env lock unsuccesful."
-	C_ERR_InvalidDateSpecified string = "ERR: Invalid 'lastday' specified, format is: YYYYMMDD."
+	ERR_JsonConvertData      string = "ERR: Error converting LockData to JSON."
+	ERR_NoNameSpecified      string = "ERR: No 'name' parameter specified."
+	ERR_NoTypeSpecified      string = "ERR: No 'type' parameter specified."
+	ERR_NoUserSpecified      string = "ERR: No 'user' parameter specified."
+	ERR_NoTokenSpecified     string = "ERR: No 'token' parameter specified."
+	ERR_WrongTypeSpecified   string = "ERR: Wrong 'type' specified, must be 'env' or 'host'."
+	ERR_IllegalUser          string = "ERR: Illegal user."
+	ERR_UserExists           string = "ERR: User already exists."
+	ERR_UserSetupFailed      string = "ERR: User setup failed."
+	ERR_EnvLockFail          string = "ERR: Env lock unsuccesful."
+	ERR_InvalidDateSpecified string = "ERR: Invalid 'lastday' specified, format is: YYYYMMDD."
+	ERR_NoAdminPresent       string = "ERR: No 'admin' user present, cannot continue."
 
 	C_TLS bool = true // serve TLS with self-signed cert?
 )
@@ -52,21 +53,21 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	if x.CacheData.Type == "" {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_NoTypeSpecified)
+		webResponse.Messages = append(webResponse.Messages, ERR_NoTypeSpecified)
 	}
 
 	// bad 'type' defined in GET request
 	if x.CacheData.Type != "env" && x.CacheData.Type != "host" {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_WrongTypeSpecified)
+		webResponse.Messages = append(webResponse.Messages, ERR_WrongTypeSpecified)
 	}
 
 	// no 'name' defined in GET request
 	if x.CacheData.Name == "" {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_NoNameSpecified)
+		webResponse.Messages = append(webResponse.Messages, ERR_NoNameSpecified)
 	}
 
 	if httpErrorCode == 0 { // GET params were good
@@ -94,7 +95,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 
 	byteData, err := json.MarshalIndent(webResponse, "", "    ")
 	if err != nil {
-		http.Error(w, C_ERR_JsonConvertData, http.StatusInternalServerError)
+		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
 		return
 	}
 
@@ -120,56 +121,56 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 	if x.CacheData.Type == "" {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_NoTypeSpecified)
+		webResponse.Messages = append(webResponse.Messages, ERR_NoTypeSpecified)
 	}
 
 	// bad 'type' defined in GET request
 	if !x.IsValidEntityType(x.CacheData.Type) {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_WrongTypeSpecified)
+		webResponse.Messages = append(webResponse.Messages, ERR_WrongTypeSpecified)
 	}
 
 	// no 'name' defined in GET request
 	if x.CacheData.Name == "" {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_NoNameSpecified)
+		webResponse.Messages = append(webResponse.Messages, ERR_NoNameSpecified)
 	}
 
 	// Is given LASTDAY is a valid date?
 	if !x.IsValidDate(x.CacheData.LastDay) {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_InvalidDateSpecified)
+		webResponse.Messages = append(webResponse.Messages, ERR_InvalidDateSpecified)
 	}
 
 	// Is given user valid against DB user? Pwd checking too.
-	if !x.RCheckUser(x.C_USER_Valid, x.CacheData.User, x.CacheData.Token) {
+	if x.RCheckUser(x.C_USER_Valid, x.CacheData.User, x.CacheData.Token) == x.C_USER_Invalid {
 
 		httpErrorCode = http.StatusForbidden
-		webResponse.Messages = append(webResponse.Messages, C_ERR_IllegalUser)
+		webResponse.Messages = append(webResponse.Messages, ERR_IllegalUser)
 	}
 
 	//
 	if !x.RSetSingle(x.C_UseCacheData, "state", C_LOCK, x.GetTimeFromNow(x.CacheData.LastDay)) {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_EnvLockFail)
+		webResponse.Messages = append(webResponse.Messages, ERR_EnvLockFail)
 	}
 
 	//
 	if !x.RSetSingle(x.C_UseCacheData, "user", x.CacheData.User, x.GetTimeFromNow(x.CacheData.LastDay)) {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_EnvLockFail)
+		webResponse.Messages = append(webResponse.Messages, ERR_EnvLockFail)
 	}
 
 	//
 	if !x.RSetSingle(x.C_UseCacheData, "lastday", x.CacheData.LastDay, x.GetTimeFromNow(x.CacheData.LastDay)) {
 
 		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, C_ERR_EnvLockFail)
+		webResponse.Messages = append(webResponse.Messages, ERR_EnvLockFail)
 	}
 
 	if httpErrorCode == 0 { // GET params were good
@@ -197,7 +198,7 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 
 	byteData, err := json.MarshalIndent(webResponse, "", "    ")
 	if err != nil {
-		http.Error(w, C_ERR_JsonConvertData, http.StatusInternalServerError)
+		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
 		return
 	}
 
@@ -229,7 +230,7 @@ func unlockHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !x.RCheckUser(x.C_USER_Valid, userName, userToken) {
+	if x.RCheckUser(x.C_USER_Valid, userName, userToken) == x.C_USER_Invalid {
 		http.Error(w, "Illegal user.", http.StatusForbidden)
 		return
 	}
@@ -257,31 +258,44 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 	userName := r.URL.Query().Get("user")
 	userToken := r.URL.Query().Get("token")
 
+	// First check if init has been made by adding an 'admin' user
+	// if we need user operations
+	if userName != "admin" {
+		if x.RCheckUser(x.C_USER_Exists, "admin", "") != x.C_USER_Exists {
+
+			httpErrorCode = http.StatusLocked
+			statusResponse.Messages = append(statusResponse.Messages, ERR_NoAdminPresent)
+		}
+	}
+
 	// no 'user' defined in GET request
 	if userName == "" {
 
 		httpErrorCode = http.StatusBadRequest
-		statusResponse.Messages = append(statusResponse.Messages, C_ERR_NoUserSpecified)
+		statusResponse.Messages = append(statusResponse.Messages, ERR_NoUserSpecified)
 	}
 
 	// no 'token' defined in GET request
 	if userToken == "" {
 
 		httpErrorCode = http.StatusBadRequest
-		statusResponse.Messages = append(statusResponse.Messages, C_ERR_NoTokenSpecified)
+		statusResponse.Messages = append(statusResponse.Messages, ERR_NoTokenSpecified)
 	}
 
-	if x.RCheckUser("existing", userName, "") {
+	if x.RCheckUser(x.C_USER_Exists, userName, "") == x.C_USER_Exists {
 
 		httpErrorCode = http.StatusForbidden
-		statusResponse.Messages = append(statusResponse.Messages, C_ERR_UserExists)
+		statusResponse.Messages = append(statusResponse.Messages, ERR_UserExists)
 	}
 
-	if !x.RSetSingle("user", userName, userToken, 0) {
+	// now error till this point, let's register the new user
+	if httpErrorCode == 0 {
 
-		httpErrorCode = http.StatusInternalServerError
-		statusResponse.Messages = append(statusResponse.Messages, C_ERR_UserSetupFailed)
+		if !x.RSetSingle("user", userName, x.CryptString(userToken), 0) {
 
+			httpErrorCode = http.StatusInternalServerError
+			statusResponse.Messages = append(statusResponse.Messages, ERR_UserSetupFailed)
+		}
 	}
 
 	if httpErrorCode == 0 {
@@ -297,7 +311,7 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 
 	byteData, err := json.MarshalIndent(statusResponse, "", "    ")
 	if err != nil {
-		http.Error(w, C_ERR_JsonConvertData, http.StatusInternalServerError)
+		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
 		return
 	}
 
