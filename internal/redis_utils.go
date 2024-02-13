@@ -1,6 +1,7 @@
 package x
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -12,11 +13,8 @@ var (
 
 )
 
+// Usually key := 'entityType:entityName'
 func RGetSingle(key string, field string) any {
-
-	if key == C_UseCacheData {
-		key = CacheData.Type + ":" + CacheData.Name
-	}
 
 	value, err := RConn.HGet(key, field).Result()
 	if err != nil || value == "" {
@@ -29,16 +27,14 @@ func RGetSingle(key string, field string) any {
 	return value
 }
 
+// Usually key := 'entityType:entityName'
 func RSetSingle(key string, field string, value any, lastDay time.Duration) bool {
-
-	if key == C_UseCacheData {
-		key = CacheData.Type + ":" + CacheData.Name
-	}
 
 	err := RConn.HSet(key, field, value).Err()
 	return err == nil
 }
 
+// Usually key := 'entityType:entityName'
 func RSetExpire(key string, expire time.Duration) bool {
 
 	errExp := RConn.Expire(key, expire).Err()
@@ -46,11 +42,11 @@ func RSetExpire(key string, expire time.Duration) bool {
 }
 
 // Do not forget to fill x.CacheData before function call!
-func RGetLockData() bool {
+func RGetLockData(c *CacheDataType) bool {
 
 	var resultsMap map[string]string
 
-	result, err := RConn.HMGet(CacheData.Type+":"+CacheData.Name, "state", "user", "lastday").Result()
+	result, err := RConn.HMGet(c.Type+":"+c.Name, "state", "user", "lastday").Result()
 	if err != nil || result[0] == nil {
 		return false
 	}
@@ -62,28 +58,28 @@ func RGetLockData() bool {
 		resultsMap[field] = result[i].(string)
 	}
 
-	CacheData.State = resultsMap["state"]
-	CacheData.User = resultsMap["user"]
-	CacheData.LastDay = resultsMap["lastday"]
+	c.State = resultsMap["state"]
+	c.User = resultsMap["user"]
+	c.LastDay = resultsMap["lastday"]
 
 	return true
 }
 
 // Do not forget to fill x.CacheData before function call!
-func RSetLockData() bool {
+func RSetLockData(c *CacheDataType) bool {
 
-	err := RConn.HMSet(CacheData.Type+":"+CacheData.Name, map[string]interface{}{
-		"state":   CacheData.State,
-		"user":    CacheData.User,
-		"lastday": CacheData.LastDay,
+	err := RConn.HMSet(c.Type+":"+c.Name, map[string]interface{}{
+		"state":   c.State,
+		"user":    c.User,
+		"lastday": c.LastDay,
 	}).Err()
 
 	return err == nil
 }
 
-func REntityDelete() bool {
+func REntityDelete(enType string, enName string) bool {
 
-	err := RConn.Del(CacheData.Type + ":" + CacheData.Name).Err()
+	err := RConn.Del(enType + ":" + enName).Err()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -95,38 +91,38 @@ func REntityDelete() bool {
 // returns: C_USER_Exists, C_USER_NotExists, C_USER_Valid, C_USER_Invalid
 func RCheckUser(chkType string, userName string, userToken string) string {
 
-	CLog("Checking user: " + userName)
+	fmt.Println("Checking user: " + userName)
 	redisPwd, err := RConn.HGet("user", userName).Result()
 
 	if err == nil { // found something
 
 		if chkType == C_USER_Exists {
 
-			CLog(userName + " user found.")
+			fmt.Println(userName + " user found.")
 			return C_USER_Exists
 
 		} else if chkType == C_USER_Valid {
 
 			if redisPwd == CryptString(userToken) {
 
-				CLog(userName + " user is valid.")
+				fmt.Println(userName + " user is valid.")
 				return C_USER_Valid
 
 			} else {
 
-				CLog(userName + " user is invalid.")
+				fmt.Println(userName + " user is invalid.")
 				return C_USER_Invalid
 			}
 
 		} else {
 
-			CLog(userName + " user not found.")
+			fmt.Println(userName + " user not found.")
 			return C_USER_NotExists
 		}
 
 	}
 
 	// nothing in db
-	CLog(userName + " user not exists (redis error).")
+	fmt.Println(userName + " user not exists (redis error).")
 	return C_USER_NotExists
 }

@@ -41,59 +41,57 @@ const (
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 
-	var webResponse x.WebResponseDataType
-	var httpErrorCode int = 0
+	res := x.NewWebResponse()
+	c := x.NewCacheData()
 
-	x.ResetWebResponse(&webResponse)
-
-	x.CacheData.Type = r.URL.Query().Get("type") // type of entity, 'env' or 'host'
-	x.CacheData.Name = r.URL.Query().Get("name") // name of entity
+	c.Type = r.URL.Query().Get("type") // type of entity, 'env' or 'host'
+	c.Name = r.URL.Query().Get("name") // name of entity
 
 	// no 'type' defined in GET request
-	if x.CacheData.Type == "" {
+	if c.Type == "" {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_NoTypeSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoTypeSpecified)
 	}
 
 	// bad 'type' defined in GET request
-	if x.CacheData.Type != "env" && x.CacheData.Type != "host" {
+	if c.Type != "env" && c.Type != "host" {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_WrongTypeSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_WrongTypeSpecified)
 	}
 
 	// no 'name' defined in GET request
-	if x.CacheData.Name == "" {
+	if c.Name == "" {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_NoNameSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoNameSpecified)
 	}
 
-	if httpErrorCode == 0 { // GET params were good
+	if c.HttpErr == 0 { // GET params were good
 
-		if x.RGetLockData() {
+		if x.RGetLockData(&c) {
 			// got some data on entity from lock database
-			webResponse.State = x.CacheData.State
-			webResponse.User = x.CacheData.User
+			res.State = c.State
+			res.User = c.User
 		} else {
 			// no lock data on entity
-			webResponse.State = "unlocked"
-			webResponse.User = ""
+			res.State = "unlocked"
+			res.User = ""
 		}
 
-		webResponse.Success = true
-		webResponse.Messages = []string{"valid_response"}
-		webResponse.Type = x.CacheData.Type
-		webResponse.Name = x.CacheData.Name
+		res.Success = true
+		res.Messages = []string{"valid_response"}
+		res.Type = c.Type
+		res.Name = c.Name
 
 	} else { // GET params were problametic a bit
 
 		w.Header().Set("Content-Type", C_RespHeader)
-		w.WriteHeader(httpErrorCode)
+		w.WriteHeader(c.HttpErr)
 	}
 
-	byteData, err := json.MarshalIndent(webResponse, "", "    ")
+	byteData, err := json.MarshalIndent(res, "", "    ")
 	if err != nil {
 		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
 		return
@@ -106,238 +104,233 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 
 func lockHandler(w http.ResponseWriter, r *http.Request) {
 
-	var webResponse x.WebResponseDataType
-	var httpErrorCode int = 0
+	res := x.NewWebResponse()
+	c := x.NewCacheData()
 
-	x.ResetWebResponse(&webResponse)
+	c.Type = r.URL.Query().Get("type")
+	c.Name = r.URL.Query().Get("name")
+	c.LastDay = r.URL.Query().Get("lastday")
+	c.User = r.URL.Query().Get("user")
+	c.Token = r.URL.Query().Get("token")
 
-	x.CacheData.Type = r.URL.Query().Get("type")
-	x.CacheData.Name = r.URL.Query().Get("name")
-	x.CacheData.LastDay = r.URL.Query().Get("lastday")
-	x.CacheData.User = r.URL.Query().Get("user")
-	x.CacheData.Token = r.URL.Query().Get("token")
+	// Check if init sequence has been made when starting anything as normal user
+	if c.User != "admin" {
+		if x.RCheckUser(x.C_USER_Exists, "admin", "") == x.C_USER_NotExists {
+
+			c.HttpErr = http.StatusLocked
+			res.Messages = append(res.Messages, ERR_NoAdminPresent)
+		}
+	}
 
 	// no 'type' defined in GET request
-	if x.CacheData.Type == "" {
+	if c.Type == "" {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_NoTypeSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoTypeSpecified)
 	}
 
 	// bad 'type' defined in GET request
-	if !x.IsValidEntityType(x.CacheData.Type) {
+	if !x.IsValidEntityType(c.Type) {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_WrongTypeSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_WrongTypeSpecified)
 	}
 
 	// no 'name' defined in GET request
-	if x.CacheData.Name == "" {
+	if c.Name == "" {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_NoNameSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoNameSpecified)
 	}
 
 	// Is given LASTDAY is a valid date?
-	if !x.IsValidDate(x.CacheData.LastDay) {
+	if !x.IsValidDate(c.LastDay) {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_InvalidDateSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_InvalidDateSpecified)
 	}
 
 	// Is given user valid against DB user? Pwd checking too.
-	if x.RCheckUser(x.C_USER_Valid, x.CacheData.User, x.CacheData.Token) == x.C_USER_Invalid {
+	if x.RCheckUser(x.C_USER_Valid, c.User, c.Token) == x.C_USER_Invalid {
 
-		httpErrorCode = http.StatusForbidden
-		webResponse.Messages = append(webResponse.Messages, ERR_IllegalUser)
+		c.HttpErr = http.StatusForbidden
+		res.Messages = append(res.Messages, ERR_IllegalUser)
 	}
 
 	//
-	if !x.RSetSingle(x.C_UseCacheData, "state", C_LOCK, x.GetTimeFromNow(x.CacheData.LastDay)) {
+	if !x.RSetSingle(x.C_UseCacheData, "state", C_LOCK, x.GetTimeFromNow(c.LastDay)) {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_EnvLockFail)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_EnvLockFail)
 	}
 
 	//
-	if !x.RSetSingle(x.C_UseCacheData, "user", x.CacheData.User, x.GetTimeFromNow(x.CacheData.LastDay)) {
+	if !x.RSetSingle(x.C_UseCacheData, "user", c.User, x.GetTimeFromNow(c.LastDay)) {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_EnvLockFail)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_EnvLockFail)
 	}
 
 	//
-	if !x.RSetSingle(x.C_UseCacheData, "lastday", x.CacheData.LastDay, x.GetTimeFromNow(x.CacheData.LastDay)) {
+	if !x.RSetSingle(x.C_UseCacheData, "lastday", c.LastDay, x.GetTimeFromNow(c.LastDay)) {
 
-		httpErrorCode = http.StatusBadRequest
-		webResponse.Messages = append(webResponse.Messages, ERR_EnvLockFail)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_EnvLockFail)
 	}
 
-	if httpErrorCode == 0 { // GET params were good
+	if c.HttpErr == 0 { // GET params were good
 
-		if x.RGetLockData() {
+		if x.RGetLockData(&c) {
 			// got some data on entity from lock database
-			webResponse.State = x.CacheData.State
-			webResponse.User = x.CacheData.User
+			res.State = c.State
+			res.User = c.User
 		} else {
 			// no lock data on entity
-			webResponse.State = "unlocked"
-			webResponse.User = ""
+			res.State = "unlocked"
+			res.User = ""
 		}
 
-		webResponse.Success = true
-		webResponse.Messages = []string{"valid_response"}
-		webResponse.Type = x.CacheData.Type
-		webResponse.Name = x.CacheData.Name
+		res.Success = true
+		res.Messages = []string{"valid_response"}
+		res.Type = c.Type
+		res.Name = c.Name
 
 	} else { // GET params were problametic a bit
 
 		w.Header().Set("Content-Type", C_RespHeader)
-		w.WriteHeader(httpErrorCode)
+		w.WriteHeader(c.HttpErr)
 	}
 
-	byteData, err := json.MarshalIndent(webResponse, "", "    ")
-	if err != nil {
-		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", C_RespHeader)
-	/* trunk-ignore(golangci-lint/errcheck) */
-	w.Write(byteData)
+	returnWebResponse(w, c.HttpErr, &res)
 }
 
 func unlockHandler(w http.ResponseWriter, r *http.Request) {
 
-	var httpResponse string
+	res := x.NewWebResponse()
+	c := x.NewCacheData()
 
-	entityName := r.URL.Query().Get("entity")
-	entityType := r.URL.Query().Get("type")
-	userName := r.URL.Query().Get("user")
-	userToken := r.URL.Query().Get("token")
+	c.Type = r.URL.Query().Get("type")
+	c.Name = r.URL.Query().Get("name")
+	c.User = r.URL.Query().Get("user")
+	c.Token = r.URL.Query().Get("token")
 
-	if entityName == "" {
+	// Check if init sequence has been made when starting anything as normal user
+	if c.User != x.C_ADMIN {
+		if x.RCheckUser(x.C_USER_Exists, x.C_ADMIN, "") == x.C_USER_NotExists {
+
+			c.HttpErr = http.StatusLocked
+			res.Messages = append(res.Messages, ERR_NoAdminPresent)
+		}
+	}
+
+	// Check for missing entity type
+	if c.Type == "" {
 		// only one parameter allowed, not host and env in the same time
-		fmt.Println("+host+env")
-		http.Error(w, "ERR: No 'entity' (host or env name) specified.", http.StatusBadRequest)
-		return
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoTypeSpecified)
 	}
 
-	if entityType == "" {
-		// only one parameter allowed, not host and env in the same time
-		fmt.Println("-host-env")
-		http.Error(w, "ERR: No 'type' of entity specified.", http.StatusBadRequest)
-		return
+	// Check for missing entity name
+	if c.Name == "" {
+
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoNameSpecified)
 	}
 
-	if x.RCheckUser(x.C_USER_Valid, userName, userToken) == x.C_USER_Invalid {
-		http.Error(w, "Illegal user.", http.StatusForbidden)
-		return
+	if x.RCheckUser(x.C_USER_Valid, c.User, c.Token) == x.C_USER_Invalid {
+
+		c.HttpErr = http.StatusForbidden
+		res.Messages = append(res.Messages, ERR_IllegalUser)
 	}
 
-	// UNLOCK function
-	x.CacheData.Type = entityType
-	x.CacheData.Name = entityName
+	if !x.REntityDelete(c.Type, c.Name) {
 
-	x.REntityDelete()
-	httpResponse = fmt.Sprintf("'%s:%s' unlocked successfully by %s.", entityType, entityName, userName)
+		c.HttpErr = http.StatusForbidden
+		res.Messages = append(res.Messages, ERR_IllegalUser)
 
-	w.Header().Set("Content-Type", C_RespHeader)
-	/* trunk-ignore(golangci-lint/errcheck) */
-	w.Write([]byte(string(httpResponse)))
+	} else {
 
+		c.HttpErr = http.StatusOK
+		res.Messages = append(res.Messages, "")
+	}
+
+	returnWebResponse(w, c.HttpErr, &res)
 }
 
 func regHandler(w http.ResponseWriter, r *http.Request) {
 
-	var statusResponse x.StatusRespType
-	var httpErrorCode int = 0
+	res := x.NewWebResponse()
+	c := x.NewCacheData()
 
-	x.ResetStatusResponse(&statusResponse)
+	c.User = r.URL.Query().Get("user")
+	c.Token = r.URL.Query().Get("token")
 
-	userName := r.URL.Query().Get("user")
-	userToken := r.URL.Query().Get("token")
+	// Check if init sequence has been made when starting anything as normal user
+	if c.User != x.C_ADMIN {
+		if x.RCheckUser(x.C_USER_Exists, x.C_ADMIN, "") == x.C_USER_NotExists {
 
-	// First check if init has been made by adding an 'admin' user
-	// if we need user operations
-	if userName != "admin" {
-		if x.RCheckUser(x.C_USER_Exists, "admin", "") != x.C_USER_Exists {
-
-			httpErrorCode = http.StatusLocked
-			statusResponse.Messages = append(statusResponse.Messages, ERR_NoAdminPresent)
+			c.HttpErr = http.StatusLocked
+			res.Messages = append(res.Messages, ERR_NoAdminPresent)
 		}
 	}
 
 	// no 'user' defined in GET request
-	if userName == "" {
+	if c.User == "" {
 
-		httpErrorCode = http.StatusBadRequest
-		statusResponse.Messages = append(statusResponse.Messages, ERR_NoUserSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoUserSpecified)
 	}
 
 	// no 'token' defined in GET request
-	if userToken == "" {
+	if c.Token == "" {
 
-		httpErrorCode = http.StatusBadRequest
-		statusResponse.Messages = append(statusResponse.Messages, ERR_NoTokenSpecified)
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoTokenSpecified)
 	}
 
-	if x.RCheckUser(x.C_USER_Exists, userName, "") == x.C_USER_Exists {
+	if x.RCheckUser(x.C_USER_Exists, c.User, "") == x.C_USER_Exists {
 
-		httpErrorCode = http.StatusForbidden
-		statusResponse.Messages = append(statusResponse.Messages, ERR_UserExists)
+		c.HttpErr = http.StatusForbidden
+		res.Messages = append(res.Messages, ERR_UserExists)
 	}
 
 	// now error till this point, let's register the new user
-	if httpErrorCode == 0 {
+	if c.HttpErr == 0 {
 
-		if !x.RSetSingle("user", userName, x.CryptString(userToken), 0) {
+		if !x.RSetSingle("user", c.User, x.CryptString(c.Token), 0) {
 
-			httpErrorCode = http.StatusInternalServerError
-			statusResponse.Messages = append(statusResponse.Messages, ERR_UserSetupFailed)
+			c.HttpErr = http.StatusInternalServerError
+			res.Messages = append(res.Messages, ERR_UserSetupFailed)
+		} else {
+			c.HttpErr = http.StatusCreated
+			m := fmt.Sprintf("OK: User '%s' created.", c.User)
+			res.Messages = append(res.Messages, m)
 		}
 	}
 
-	if httpErrorCode == 0 {
-
-		statusResponse.Success = true
-		statusResponse.Messages = []string{"OK: User created."}
-
-	} else {
-
-		w.Header().Set("Content-Type", C_RespHeader)
-		w.WriteHeader(httpErrorCode)
-	}
-
-	byteData, err := json.MarshalIndent(statusResponse, "", "    ")
-	if err != nil {
-		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", C_RespHeader)
-	/* trunk-ignore(golangci-lint/errcheck) */
-	w.Write(byteData)
-
+	returnWebResponse(w, c.HttpErr, &res)
 }
 
 func adminHandler(w http.ResponseWriter, r *http.Request) {
 
-	var paramResult string
+	res := x.NewWebResponse()
+	c := x.NewCacheData()
 
 	adminToken := r.URL.Query().Get("token")
 	entity := r.URL.Query().Get("entity")
 	action := r.URL.Query().Get("action")
 
 	if adminToken == "" {
-		paramResult = "Missing 'token' parameter"
+		c.HttpErr = http.StatusInternalServerError
+		res.Messages = append(res.Messages, "ERR: Missing 'token' parameter")
 	}
 
 	if entity == "user" {
 		if action == "purge" {
 
 		} else {
-			paramResult = "ERR: Illegal 'action' parameter"
+			c.HttpErr = http.StatusInternalServerError
+			res.Messages = append(res.Messages, "ERR: Illegal 'action' parameter")
 		}
 
 	} else if entity == "env" {
@@ -348,7 +341,8 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 		} else if action == "terminate" {
 
 		} else {
-			paramResult = "ERR: Illegal 'action' parameter"
+			c.HttpErr = http.StatusInternalServerError
+			res.Messages = append(res.Messages, "ERR: Illegal 'action' parameter")
 		}
 
 	} else if entity == "host" {
@@ -357,15 +351,44 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 		} else if action == "terminate" {
 
 		} else {
-			paramResult = "ERR: Illegal 'action' parameter"
+			c.HttpErr = http.StatusInternalServerError
+			res.Messages = append(res.Messages, "ERR: Illegal 'action' parameter")
 		}
 
 	} else {
-		paramResult = "ERR: Illegal 'entity' parameter"
+		c.HttpErr = http.StatusInternalServerError
+		res.Messages = append(res.Messages, "ERR: Illegal 'name' parameter")
 	}
 
-	http.Error(w, paramResult, http.StatusBadRequest)
+	returnWebResponse(w, c.HttpErr, &res)
 
+}
+
+func returnWebResponse(w http.ResponseWriter, httpErr int, retData *x.WebResponseType) {
+
+	// set 200 instead of 0 on http status
+	if httpErr == 0 {
+		httpErr = http.StatusOK
+	}
+
+	// set 'success' in JSON response according to http status code
+	if httpErr < 400 {
+		retData.Success = true
+	} else {
+		retData.Success = false
+	}
+
+	byteData, err := json.MarshalIndent(retData, "", "    ")
+	if err != nil {
+		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", C_RespHeader)
+	w.WriteHeader(httpErr)
+
+	/* trunk-ignore(golangci-lint/errcheck) */
+	w.Write(byteData)
 }
 
 func main() {

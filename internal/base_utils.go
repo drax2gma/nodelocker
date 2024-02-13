@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"log"
+	"net/http"
 	"regexp"
 	"slices"
 	"time"
@@ -16,9 +17,10 @@ type CacheDataType struct {
 	LastDay string `json:"lastday"`
 	User    string `json:"user"`
 	Token   string `json:"token"`
+	HttpErr int    `json:"httperr"`
 }
 
-type WebResponseDataType struct {
+type WebResponseType struct {
 	Success  bool     `json:"success"`
 	Messages []string `json:"messages"`
 	Type     string   `json:"type"`
@@ -28,12 +30,8 @@ type WebResponseDataType struct {
 	User     string   `json:"user"`
 }
 
-type StatusRespType struct {
-	Success  bool     `json:"success"`
-	Messages []string `json:"messages"`
-}
-
 const (
+	C_ADMIN          string = "admin"
 	C_UseCacheData   string = "(cached)"
 	C_USER_Valid     string = "uv"
 	C_USER_Invalid   string = "ui"
@@ -41,9 +39,10 @@ const (
 	C_USER_NotExists string = "un"
 )
 
-var CacheData CacheDataType // temp manipulation of data fields
+func NewWebResponse() WebResponseType {
 
-func ResetWebResponse(r *WebResponseDataType) {
+	var r WebResponseType
+
 	r.Type = ""
 	r.Name = ""
 	r.State = ""
@@ -51,27 +50,33 @@ func ResetWebResponse(r *WebResponseDataType) {
 	r.User = ""
 	r.Success = false
 	r.Messages = []string{}
+
+	return r
 }
 
-func ResetCacheData(c *CacheDataType) {
+func NewCacheData() CacheDataType {
+
+	var c CacheDataType
+
 	c.Type = ""
 	c.Name = ""
 	c.State = ""
 	c.LastDay = ""
 	c.User = ""
 	c.Token = ""
-}
+	c.HttpErr = http.StatusInternalServerError
 
-func ResetStatusResponse(r *StatusRespType) {
-	r.Success = false
-	r.Messages = []string{}
+	return c
 }
 
 // Crypt a plain string into sha1 hash string
 func CryptString(plain string) string {
 
+	const preSalt string = "68947b1f416c3a5655e1ff9e7c7935f6"
+	const postSalt string = "5f09dd9c81596ea3cc93ce0df58e26d8"
+
 	h := sha1.New()
-	h.Write([]byte(plain))
+	h.Write([]byte(preSalt + plain + postSalt))
 	sha1Hash := h.Sum(nil)
 	hexString := fmt.Sprintf("%x", sha1Hash)
 	return hexString
@@ -134,11 +139,5 @@ func IsValidEntityType(t string) bool {
 
 	validTypes := []string{"env", "host"}
 	return slices.Contains(validTypes, t)
-
-}
-
-func CLog(msg string) {
-
-	fmt.Println(msg)
 
 }
