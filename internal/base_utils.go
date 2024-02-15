@@ -4,7 +4,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"log"
-	"net/http"
 	"regexp"
 	"slices"
 	"time"
@@ -31,12 +30,21 @@ type WebResponseType struct {
 }
 
 const (
-	C_ADMIN          string = "admin"
-	C_UseCacheData   string = "(cached)"
-	C_USER_Valid     string = "uv"
-	C_USER_Invalid   string = "ui"
-	C_USER_Exists    string = "ue"
-	C_USER_NotExists string = "un"
+	C_ADMIN     string = "admin"
+	C_ENV_LIST  string = "envlist"
+	C_TYPE_ENV  string = "env"
+	C_TYPE_HOST string = "host"
+
+	C_SUCCESS string = "✅"
+	C_FAILED  string = "❌"
+	C_STARTED string = "🌐"
+
+	C_LOCKED      string = "locked"
+	C_TERMINATED  string = "termnd"
+	C_MAINTENANCE string = "maint"
+
+	C_RespHeader string = "application/json"
+	C_Secret     string = "XXXXXXX"
 )
 
 func NewWebResponse() WebResponseType {
@@ -64,7 +72,7 @@ func NewCacheData() CacheDataType {
 	c.LastDay = ""
 	c.User = ""
 	c.Token = ""
-	c.HttpErr = http.StatusInternalServerError
+	c.HttpErr = 0
 
 	return c
 }
@@ -137,7 +145,103 @@ func IsValidDate(dateParam string) bool {
 
 func IsValidEntityType(t string) bool {
 
-	validTypes := []string{"env", "host"}
+	validTypes := []string{C_TYPE_ENV, C_TYPE_HOST}
 	return slices.Contains(validTypes, t)
+
+}
+
+func IsExistingUser(userName string) bool {
+
+	fmt.Printf("Checking user '%s'... ", userName)
+	_, err := RConn.HGet("user", userName).Result()
+
+	if err == nil {
+		fmt.Printf("found.\n")
+		return true
+	} else {
+		fmt.Printf("not found.\n")
+		return false
+	}
+}
+
+func IsValidUser(userName string, userToken string) bool {
+
+	fmt.Printf("Validating user '%s'... ", userName)
+	redisPwd, err := RConn.HGet("user", userName).Result()
+
+	if err == nil && len(redisPwd) > 0 {
+		// found user & password
+
+		if redisPwd == CryptString(userToken) {
+			fmt.Printf("user is valid.\n")
+			return true
+		} else {
+			fmt.Printf("password mismatch.\n")
+			return false
+		}
+	} else {
+		fmt.Printf("user not found.\n")
+		return false
+	}
+}
+
+// acquire the env from the hostname automagically
+func GetEnvFromHost(hostName string) string {
+
+	separators := []string{"-", "_", "/", ".", ",", ":"}
+
+	for i, char := range hostName {
+		for _, separator := range separators {
+			if string(char) == separator {
+				return hostName[:i]
+			}
+		}
+	}
+	return hostName
+}
+
+func IsEnvLocked(envName string) bool {
+
+	c := NewCacheData()
+	c.Type = C_TYPE_ENV
+	c.Name = envName
+	return RGetLockData(&c)
+}
+
+func CreateEnv(envName string) bool {
+
+	return RSetAddMember(C_ENV_LIST, envName)
+}
+
+func MaintenanceEnv(envName string) bool {
+
+	c := NewCacheData()
+	c.Type = C_TYPE_ENV
+	c.Name = envName
+	c.State = C_MAINTENANCE
+	return RSetLockData(&c)
+}
+
+func TerminateEnv(envName string) bool {
+
+	c := NewCacheData()
+	c.Type = C_TYPE_ENV
+	c.Name = envName
+	c.State = C_TERMINATED
+	p1 := RGetLockData(&c)
+	p2 := RSetRemoveMember(C_TYPE_ENV, envName)
+
+	return p1 && p2
+}
+
+func UnlockEnv(envName string) bool {
+
+	return REntityDelete(C_TYPE_ENV, envName)
+
+}
+
+func UnlockHost(hostName string) bool {
+
+	return REntityDelete(C_TYPE_HOST, hostName)
 
 }

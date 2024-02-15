@@ -83,11 +83,11 @@ func ServeTLS(r *chi.Mux) {
 
 	err := generateCertificate()
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Printf("%s Error generating certificate: %s\n", C_FAILED, err)
 		return
+	} else {
+		fmt.Printf("%s Certificate and private key generated successfully.\n", C_SUCCESS)
 	}
-
-	fmt.Println("Certificate and private key generated successfully.")
 
 	// Load the private key and certificate
 	privateKey, err := os.ReadFile(C_CERT_BASEPATH + "private-key.pem")
@@ -125,9 +125,9 @@ func ServeTLS(r *chi.Mux) {
 	}
 
 	// Start the server
-	fmt.Printf("Server is running on %s\n", server.Addr)
+	fmt.Printf("%s Server is accepting connections on %s\n", C_STARTED, server.Addr)
 	err = server.ListenAndServeTLS("", "")
 	if err != nil {
-		fmt.Println("Error starting server:", err.Error())
+		fmt.Printf("%s Error starting server: %s\n", C_FAILED, err.Error())
 	}
 }

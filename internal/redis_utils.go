@@ -2,7 +2,6 @@ package x
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -13,7 +12,6 @@ var (
 
 )
 
-// Usually key := 'entityType:entityName'
 func RGetSingle(key string, field string) any {
 
 	value, err := RConn.HGet(key, field).Result()
@@ -27,7 +25,6 @@ func RGetSingle(key string, field string) any {
 	return value
 }
 
-// Usually key := 'entityType:entityName'
 func RSetSingle(key string, field string, value any, lastDay time.Duration) bool {
 
 	err := RConn.HSet(key, field, value).Err()
@@ -79,50 +76,42 @@ func RSetLockData(c *CacheDataType) bool {
 
 func REntityDelete(enType string, enName string) bool {
 
-	err := RConn.Del(enType + ":" + enName).Err()
+	err := RConn.HDel(enType, enName).Err()
 	if err != nil {
-		log.Fatal(err.Error())
+		fmt.Println(err.Error())
 	}
 
+	// Check if entity has gone
+	if RGetSingle(enType, enName) == nil {
+		return true
+	} else {
+		return false
+	}
+}
+
+func RSetAddMember(setName string, member string) bool {
+
+	err := RConn.SAdd(setName, member).Err()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 	return true
 }
 
-// chkType: C_USER_Exists or C_USER_Valid
-// returns: C_USER_Exists, C_USER_NotExists, C_USER_Valid, C_USER_Invalid
-func RCheckUser(chkType string, userName string, userToken string) string {
+func RSetRemoveMember(setName string, member string) bool {
 
-	fmt.Println("Checking user: " + userName)
-	redisPwd, err := RConn.HGet("user", userName).Result()
-
-	if err == nil { // found something
-
-		if chkType == C_USER_Exists {
-
-			fmt.Println(userName + " user found.")
-			return C_USER_Exists
-
-		} else if chkType == C_USER_Valid {
-
-			if redisPwd == CryptString(userToken) {
-
-				fmt.Println(userName + " user is valid.")
-				return C_USER_Valid
-
-			} else {
-
-				fmt.Println(userName + " user is invalid.")
-				return C_USER_Invalid
-			}
-
-		} else {
-
-			fmt.Println(userName + " user not found.")
-			return C_USER_NotExists
-		}
-
+	err := RConn.SRem(setName, member).Err()
+	if err != nil {
+		fmt.Println(err.Error())
 	}
+	return true
+}
 
-	// nothing in db
-	fmt.Println(userName + " user not exists (redis error).")
-	return C_USER_NotExists
+func RIsMemberOfSet(setName string, member string) bool {
+
+	m, err := RConn.SIsMember(setName, member).Result()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	return m
 }
