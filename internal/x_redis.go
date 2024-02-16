@@ -56,6 +56,7 @@ func RGetLockData(c *CacheDataType) bool {
 	}
 
 	c.State = resultsMap["state"]
+	c.Parent = resultsMap["parent"]
 	c.User = resultsMap["user"]
 	c.LastDay = resultsMap["lastday"]
 
@@ -67,6 +68,7 @@ func RSetLockData(c *CacheDataType) bool {
 
 	err := RConn.HMSet(c.Type+":"+c.Name, map[string]interface{}{
 		"state":   c.State,
+		"parent":  c.Parent,
 		"user":    c.User,
 		"lastday": c.LastDay,
 	}).Err()
@@ -114,4 +116,47 @@ func RIsMemberOfSet(setName string, member string) bool {
 		fmt.Println(err.Error())
 	}
 	return m
+}
+
+func RGetHostsInEnv(envName string) []string {
+
+	// Create a cursor to iterate over hash sets
+	var cursor uint64 = 0
+	var resultList []string
+
+	fmt.Printf("Checking hosts in %s env...", envName)
+
+	for {
+		// Use SCAN command to get keys matching the pattern
+		keys, nextCursor, err := RConn.Scan(cursor, C_TYPE_HOST+":*", 0).Result()
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+
+		// Loop through the keys and check if 'env' field contains envName
+		for _, key := range keys {
+			// Use HGET command to get the value of the 'env' field
+			parent, err := RConn.HGet(key, C_PARENT).Result()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+
+			if parent == envName {
+				resultList = append(resultList, key)
+				fmt.Printf("%s ", key)
+			}
+		}
+		fmt.Println()
+
+		// If nextCursor is 0, it means iteration is complete
+		if nextCursor == 0 {
+			break
+		}
+
+		// Update the cursor for the next iteration
+		cursor = nextCursor
+	}
+
+	return resultList
+
 }

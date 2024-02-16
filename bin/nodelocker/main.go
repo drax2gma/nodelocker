@@ -15,39 +15,6 @@ import (
 	x "github.com/drax2gma/nodelocker/internal"
 )
 
-const (
-	ERR_JsonConvertData      string = "ERR: Error converting LockData to JSON."
-	ERR_NoNameSpecified      string = "ERR: No 'name' parameter specified."
-	ERR_NoTypeSpecified      string = "ERR: No 'type' parameter specified."
-	ERR_NoUserSpecified      string = "ERR: No 'user' parameter specified."
-	ERR_NoTokenSpecified     string = "ERR: No 'token' parameter specified."
-	ERR_WrongTypeSpecified   string = "ERR: Wrong 'type' specified, must be 'env' or 'host'."
-	ERR_IllegalUser          string = "ERR: Illegal user."
-	ERR_CannotDeleteUser     string = "ERR: Cannot delete user."
-	ERR_UserExists           string = "ERR: User already exists."
-	ERR_UserSetupFailed      string = "ERR: User setup failed."
-	ERR_EnvLockFail          string = "ERR: Environment lock unsuccesful."
-	ERR_EnvCreationFail      string = "ERR: Creating a new enviromnent failed."
-	ERR_EnvUnlockFail        string = "ERR: Environment unlock failed."
-	ERR_EnvSetMaintFailFail  string = "ERR: Environment maintenance set failed."
-	ERR_EnvSetTermFail       string = "ERR: Environment termination failed."
-	ERR_HostLockFail         string = "ERR: Host lock unsuccesful."
-	ERR_HostUnlockFail       string = "ERR: Host unlock failed."
-	ERR_InvalidDateSpecified string = "ERR: Invalid 'lastday' specified, format is: YYYYMMDD."
-	ERR_NoAdminPresent       string = "ERR: No 'admin' user present, cannot continue."
-
-	OK_UserPurged          string = "OK: User purged."
-	OK_EnvCreated          string = "OK: Environment created."
-	OK_EnvUnlocked         string = "OK: Environment unlocked."
-	OK_EnvSetToMaintenance string = "OK: Environment is in maintenance mode now."
-	OK_EnvSetToTerminate   string = "OK: Environment terminated."
-	OK_HostUnlocked        string = "OK: Host has been unlocked succesfully."
-
-	C_TLS bool = true // serve TLS with self-signed cert?
-
-	C_HTTP_OK = 0
-)
-
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 
 	res := x.NewWebResponse()
@@ -56,28 +23,17 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	c.Type = r.URL.Query().Get("type") // type of entity, 'env' or 'host'
 	c.Name = r.URL.Query().Get("name") // name of entity
 
-	// no 'type' defined in GET request
-	if c.Type == "" {
-
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoTypeSpecified)
-	}
-
-	// bad 'type' defined in GET request
-	if !x.IsValidEntityType(c.Type) {
-
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_WrongTypeSpecified)
-	}
+	// check 'type' defined in GET request
+	x.CheckType(&c, &res)
 
 	// no 'name' defined in GET request
 	if c.Name == "" {
 
 		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoNameSpecified)
+		res.Messages = append(res.Messages, x.ERR_NoNameSpecified)
 	}
 
-	if c.HttpErr == C_HTTP_OK { // GET params were good
+	if c.HttpErr == x.C_HTTP_OK { // GET params were good
 
 		if x.RGetLockData(&c) {
 			// got some data on entity from lock database
@@ -102,7 +58,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 
 	byteData, err := json.MarshalIndent(res, "", "    ")
 	if err != nil {
-		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
+		http.Error(w, x.ERR_JsonConvertData, http.StatusInternalServerError)
 		return
 	}
 
@@ -127,79 +83,45 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 		if !x.IsExistingUser(x.C_ADMIN) {
 
 			c.HttpErr = http.StatusLocked
-			res.Messages = append(res.Messages, ERR_NoAdminPresent)
+			res.Messages = append(res.Messages, x.ERR_NoAdminPresent)
 		}
 	}
 
-	// no 'type' defined in GET request
-	if c.Type == "" {
-
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoTypeSpecified)
-	}
-
-	// bad 'type' defined in GET request
-	if !x.IsValidEntityType(c.Type) {
-
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_WrongTypeSpecified)
-	}
+	// check 'type' defined in GET request
+	x.CheckType(&c, &res)
 
 	// no 'name' defined in GET request
 	if c.Name == "" {
 
 		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoNameSpecified)
+		res.Messages = append(res.Messages, x.ERR_NoNameSpecified)
+	}
+
+	// trying to lock an env that contain locked host(s)
+	if c.Type == x.C_TYPE_ENV && x.IsEnvContainHosts(c.Name) {
+
+		c.HttpErr = http.StatusForbidden
+		res.Messages = append(res.Messages, x.ERR_LockedHostsInEnv)
 	}
 
 	// Is given LASTDAY is a valid date?
 	if !x.IsValidDate(c.LastDay) {
 
 		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_InvalidDateSpecified)
+		res.Messages = append(res.Messages, x.ERR_InvalidDateSpecified)
 	}
 
 	// Is given user valid against DB user? Pwd checking too.
 	if !x.IsValidUser(c.User, c.Token) {
 
 		c.HttpErr = http.StatusForbidden
-		res.Messages = append(res.Messages, ERR_IllegalUser)
+		res.Messages = append(res.Messages, x.ERR_IllegalUser)
 	}
 
-	if !x.RSetLockData(&c) {
+	// on C_HTTP_OK lock
+	if c.HttpErr == x.C_HTTP_OK {
 
-		c.HttpErr = http.StatusInternalServerError
-
-		if c.Type == x.C_TYPE_ENV {
-			res.Messages = append(res.Messages, ERR_EnvLockFail)
-		} else if c.Type == x.C_TYPE_HOST {
-			res.Messages = append(res.Messages, ERR_HostLockFail)
-		} else {
-			res.Messages = append(res.Messages, ERR_InvalidDateSpecified)
-		}
-	}
-
-	if c.HttpErr == C_HTTP_OK { // GET params were good
-
-		if x.RGetLockData(&c) {
-			// got some data on entity from lock database
-			res.State = c.State
-			res.User = c.User
-		} else {
-			// no lock data on entity
-			res.State = "unlocked"
-			res.User = ""
-		}
-
-		res.Success = true
-		res.Messages = []string{"valid_response"}
-		res.Type = c.Type
-		res.Name = c.Name
-
-	} else { // GET params were problametic a bit
-
-		w.Header().Set("Content-Type", x.C_RespHeader)
-		w.WriteHeader(c.HttpErr)
+		x.DoLock(&c, &res)
 	}
 
 	returnWebResponse(w, c.HttpErr, &res)
@@ -220,34 +142,30 @@ func unlockHandler(w http.ResponseWriter, r *http.Request) {
 		if !x.IsExistingUser(x.C_ADMIN) {
 
 			c.HttpErr = http.StatusLocked
-			res.Messages = append(res.Messages, ERR_NoAdminPresent)
+			res.Messages = append(res.Messages, x.ERR_NoAdminPresent)
 		}
 	}
 
-	// Check for missing entity type
-	if c.Type == "" {
-		// only one parameter allowed, not host and env in the same time
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoTypeSpecified)
-	}
+	// check 'type' defined in GET request
+	x.CheckType(&c, &res)
 
 	// Check for missing entity name
 	if c.Name == "" {
 
 		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoNameSpecified)
+		res.Messages = append(res.Messages, x.ERR_NoNameSpecified)
 	}
 
 	if !x.IsValidUser(c.User, c.Token) {
 
 		c.HttpErr = http.StatusForbidden
-		res.Messages = append(res.Messages, ERR_IllegalUser)
+		res.Messages = append(res.Messages, x.ERR_IllegalUser)
 	}
 
 	if !x.REntityDelete(c.Type, c.Name) {
 
 		c.HttpErr = http.StatusForbidden
-		res.Messages = append(res.Messages, ERR_IllegalUser)
+		res.Messages = append(res.Messages, x.ERR_IllegalUser)
 
 	} else {
 
@@ -271,7 +189,7 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 		if !x.IsExistingUser(x.C_ADMIN) {
 
 			c.HttpErr = http.StatusLocked
-			res.Messages = append(res.Messages, ERR_NoAdminPresent)
+			res.Messages = append(res.Messages, x.ERR_NoAdminPresent)
 		}
 	}
 
@@ -279,7 +197,7 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 	if c.User == "" {
 
 		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoUserSpecified)
+		res.Messages = append(res.Messages, x.ERR_NoUserSpecified)
 	} else {
 		res.User = c.User
 	}
@@ -288,22 +206,22 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 	if c.Token == "" {
 
 		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoTokenSpecified)
+		res.Messages = append(res.Messages, x.ERR_NoTokenSpecified)
 	}
 
 	if x.IsExistingUser(c.User) {
 
 		c.HttpErr = http.StatusForbidden
-		res.Messages = append(res.Messages, ERR_UserExists)
+		res.Messages = append(res.Messages, x.ERR_UserExists)
 	}
 
 	// now error till this point, let's register the new user
-	if c.HttpErr == C_HTTP_OK {
+	if c.HttpErr == x.C_HTTP_OK {
 
 		if !x.RSetSingle("user", c.User, x.CryptString(c.Token), 0) {
 
 			c.HttpErr = http.StatusInternalServerError
-			res.Messages = append(res.Messages, ERR_UserSetupFailed)
+			res.Messages = append(res.Messages, x.ERR_UserSetupFailed)
 		} else {
 			c.HttpErr = http.StatusCreated
 			m := fmt.Sprintf("OK: User '%s' created.", c.User)
@@ -320,71 +238,73 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 	c := x.NewCacheData()
 
 	action := r.URL.Query().Get("action")
-	name := r.URL.Query().Get("name")
+	c.Name = r.URL.Query().Get("name")
 	adminToken := r.URL.Query().Get("token")
 
 	if adminToken == "" || !x.IsValidUser(x.C_ADMIN, adminToken) {
 		c.HttpErr = http.StatusForbidden
-		res.Messages = append(res.Messages, ERR_IllegalUser)
+		res.Messages = append(res.Messages, x.ERR_IllegalUser)
 
 	} else if action == "user-purge" { // Purge a user which probably forgot their password
 
-		if x.REntityDelete("user", name) {
+		if x.REntityDelete("user", c.Name) {
 			c.HttpErr = http.StatusOK
-			res.Messages = append(res.Messages, OK_UserPurged)
+			res.Messages = append(res.Messages, x.OK_UserPurged)
 		} else {
 			c.HttpErr = http.StatusInternalServerError
-			res.Messages = append(res.Messages, ERR_CannotDeleteUser)
+			res.Messages = append(res.Messages, x.ERR_CannotDeleteUser)
 		}
 
 	} else if action == "env-create" { // Add a new environment
 
-		if x.CreateEnv(name) {
+		if x.CreateEnv(c.Name) {
 			c.HttpErr = http.StatusOK
-			res.Messages = append(res.Messages, OK_EnvCreated)
+			res.Messages = append(res.Messages, x.OK_EnvCreated)
 		} else {
 			c.HttpErr = http.StatusForbidden
-			res.Messages = append(res.Messages, ERR_EnvCreationFail)
+			res.Messages = append(res.Messages, x.ERR_EnvCreationFail)
 		}
 
 	} else if action == "env-unlock" { // Unlock an env from maintenance or terminate state
 
-		if x.UnlockEnv(name) {
+		if x.UnlockEnv(c.Name) {
 			c.HttpErr = http.StatusOK
-			res.Messages = append(res.Messages, OK_EnvUnlocked)
+			res.Messages = append(res.Messages, x.OK_EnvUnlocked)
 		} else {
 			c.HttpErr = http.StatusForbidden
-			res.Messages = append(res.Messages, ERR_EnvUnlockFail)
+			res.Messages = append(res.Messages, x.ERR_EnvUnlockFail)
 		}
 
 	} else if action == "env-maintenance" { // Setup an env for maintenance
 
-		if x.MaintenanceEnv(name) {
+		if x.MaintenanceEnv(c.Name) {
 			c.HttpErr = http.StatusOK
-			res.Messages = append(res.Messages, OK_EnvSetToMaintenance)
+			c.State = x.C_MAINTENANCE
+			res.Messages = append(res.Messages, x.OK_EnvSetToMaintenance)
 		} else {
 			c.HttpErr = http.StatusForbidden
-			res.Messages = append(res.Messages, ERR_EnvSetMaintFailFail)
+			res.Messages = append(res.Messages, x.ERR_EnvSetMaintFailFail)
 		}
 
 	} else if action == "env-terminate" { // Lock an env indefinately
 
-		if x.TerminateEnv(name) {
+		if x.TerminateEnv(c.Name) {
 			c.HttpErr = http.StatusOK
-			res.Messages = append(res.Messages, OK_EnvSetToTerminate)
+			c.State = x.C_TERMINATED
+			res.Messages = append(res.Messages, x.OK_EnvSetToTerminate)
 		} else {
 			c.HttpErr = http.StatusForbidden
-			res.Messages = append(res.Messages, ERR_EnvSetTermFail)
+			res.Messages = append(res.Messages, x.ERR_EnvSetTermFail)
 		}
 
 	} else if action == "host-unlock" { // Unlock a stuck, locked host
 
-		if x.UnlockHost(name) {
+		if x.UnlockHost(c.Name) {
 			c.HttpErr = http.StatusOK
-			res.Messages = append(res.Messages, OK_HostUnlocked)
+			res.Messages = append(res.Messages, x.OK_HostUnlocked)
 		} else {
 			c.HttpErr = http.StatusForbidden
-			res.Messages = append(res.Messages, ERR_HostUnlockFail)
+			res.Messages = append(res.Messages, x.ERR_HostUnlockFail)
 		}
 
 	} else {
@@ -398,7 +318,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 func returnWebResponse(w http.ResponseWriter, httpErr int, retData *x.WebResponseType) {
 
 	// set 200 instead of C_HTTP_OK on http status
-	if httpErr == C_HTTP_OK {
+	if httpErr == x.C_HTTP_OK {
 		httpErr = http.StatusOK
 	}
 
@@ -411,7 +331,7 @@ func returnWebResponse(w http.ResponseWriter, httpErr int, retData *x.WebRespons
 
 	byteData, err := json.MarshalIndent(retData, "", "    ")
 	if err != nil {
-		http.Error(w, ERR_JsonConvertData, http.StatusInternalServerError)
+		http.Error(w, x.ERR_JsonConvertData, http.StatusInternalServerError)
 		return
 	}
 
@@ -450,7 +370,7 @@ func main() {
 
 	http.Handle("/", r)
 
-	if C_TLS {
+	if x.C_TLS_ENABLED {
 		x.ServeTLS(r)
 	} else {
 		err := http.ListenAndServe("0.0.0.0:3000", r)

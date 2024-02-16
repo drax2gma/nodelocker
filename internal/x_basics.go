@@ -4,47 +4,9 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"log"
+	"net/http"
 	"regexp"
-	"slices"
 	"time"
-)
-
-type CacheDataType struct {
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	State   string `json:"state"`
-	LastDay string `json:"lastday"`
-	User    string `json:"user"`
-	Token   string `json:"token"`
-	HttpErr int    `json:"httperr"`
-}
-
-type WebResponseType struct {
-	Success  bool     `json:"success"`
-	Messages []string `json:"messages"`
-	Type     string   `json:"type"`
-	Name     string   `json:"name"`
-	State    string   `json:"state"`
-	LastDay  string   `json:"lastday"`
-	User     string   `json:"user"`
-}
-
-const (
-	C_ADMIN     string = "admin"
-	C_ENV_LIST  string = "envlist"
-	C_TYPE_ENV  string = "env"
-	C_TYPE_HOST string = "host"
-
-	C_SUCCESS string = "✅"
-	C_FAILED  string = "❌"
-	C_STARTED string = "🌐"
-
-	C_LOCKED      string = "locked"
-	C_TERMINATED  string = "termnd"
-	C_MAINTENANCE string = "maint"
-
-	C_RespHeader string = "application/json"
-	C_Secret     string = "XXXXXXX"
 )
 
 func NewWebResponse() WebResponseType {
@@ -53,6 +15,7 @@ func NewWebResponse() WebResponseType {
 
 	r.Type = ""
 	r.Name = ""
+	r.Parent = ""
 	r.State = ""
 	r.LastDay = ""
 	r.User = ""
@@ -68,6 +31,7 @@ func NewCacheData() CacheDataType {
 
 	c.Type = ""
 	c.Name = ""
+	c.Parent = ""
 	c.State = ""
 	c.LastDay = ""
 	c.User = ""
@@ -120,11 +84,8 @@ func IsValidDate(dateParam string) bool {
 
 	// Check if the input matches the pattern
 	if !regex.MatchString(dateParam) {
-		fmt.Println("regex nomatch")
 		return false // Input doesn't match the pattern
 	}
-
-	fmt.Println("regex MATCH")
 
 	// Define the layout for YYYYMMDD format
 	layout := "20060102"
@@ -143,10 +104,26 @@ func IsValidDate(dateParam string) bool {
 	return true
 }
 
-func IsValidEntityType(t string) bool {
+// check 'type' defined in GET request
+func CheckType(c *CacheDataType, res *WebResponseType) bool {
 
-	validTypes := []string{C_TYPE_ENV, C_TYPE_HOST}
-	return slices.Contains(validTypes, t)
+	if c.Type == C_TYPE_ENV || c.Type == C_TYPE_HOST {
+
+		res.Type = c.Type
+		return true
+
+	} else if c.Type == "" {
+
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_NoTypeSpecified)
+		return false
+
+	} else {
+
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, ERR_WrongTypeSpecified)
+		return false
+	}
 
 }
 
@@ -188,7 +165,7 @@ func IsValidUser(userName string, userToken string) bool {
 // acquire the env from the hostname automagically
 func GetEnvFromHost(hostName string) string {
 
-	separators := []string{"-", "_", "/", ".", ",", ":"}
+	separators := []string{"-", "_", "/", ".", "|"}
 
 	for i, char := range hostName {
 		for _, separator := range separators {
@@ -244,4 +221,63 @@ func UnlockHost(hostName string) bool {
 
 	return REntityDelete(C_TYPE_HOST, hostName)
 
+}
+
+func IsEnvContainHosts(envName string) bool {
+
+	if len(RGetHostsInEnv(envName)) > 0 {
+		return true
+	} else {
+		return false
+	}
+}
+
+func DoLock(c *CacheDataType, res *WebResponseType) bool {
+
+	c.State = C_LOCKED
+
+	if c.Type == C_TYPE_ENV {
+
+		c.Parent = "n/a"
+		res.Messages = append(res.Messages, OK_EnvLocked)
+
+		if RSetLockData(c) { // OK
+			c.HttpErr = http.StatusOK
+			return true
+
+		} else { // ERROR
+			res.Messages = append(res.Messages, ERR_EnvLockFail)
+			c.HttpErr = http.StatusForbidden
+			return false
+
+		}
+
+	} else if c.Type == C_TYPE_HOST {
+
+		c.Parent = GetEnvFromHost(c.Name)
+
+		if IsEnvLocked(c.Parent) { // parent env has been locked
+			res.Messages = append(res.Messages, ERR_ParentEnvLockFail)
+			c.HttpErr = http.StatusForbidden
+			return false
+		}
+
+		res.Messages = append(res.Messages, OK_HostLocked)
+
+		if RSetLockData(c) { // OK
+			c.HttpErr = http.StatusOK
+			return true
+
+		} else { // ERROR
+			res.Messages = append(res.Messages, ERR_HostLockFail)
+			c.HttpErr = http.StatusForbidden
+			return false
+		}
+
+	} else { // illegal type
+
+		res.Messages = append(res.Messages, ERR_WrongTypeSpecified)
+		c.HttpErr = http.StatusInternalServerError
+		return false
+	}
 }
