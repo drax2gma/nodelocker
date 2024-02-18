@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"text/template"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -15,48 +16,15 @@ import (
 	x "github.com/drax2gma/nodelocker/internal"
 )
 
-func queryHandler(w http.ResponseWriter, r *http.Request) {
+func jsonsHandler(w http.ResponseWriter, r *http.Request) {
 
-	res := x.NewWebResponse()
-	c := x.NewCacheData()
+	stats := new(x.StatsType)
+	x.RFillJsonStats(stats)
 
-	c.Type = r.URL.Query().Get("type") // type of entity, 'env' or 'host'
-	c.Name = r.URL.Query().Get("name") // name of entity
+	w.Header().Set("Content-Type", x.C_RespHeader)
+	w.WriteHeader(http.StatusOK)
 
-	// check 'type' defined in GET request
-	x.CheckType(&c, &res)
-
-	// no 'name' defined in GET request
-	if c.Name == "" {
-
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, x.ERR_NoNameSpecified)
-	}
-
-	if c.HttpErr == x.C_HTTP_OK { // GET params were good
-
-		if x.RGetLockData(&c) {
-			// got some data on entity from lock database
-			res.State = c.State
-			res.User = c.User
-		} else {
-			// no lock data on entity
-			res.State = "unlocked"
-			res.User = ""
-		}
-
-		res.Success = true
-		res.Messages = []string{"valid_response"}
-		res.Type = c.Type
-		res.Name = c.Name
-
-	} else { // GET params were problametic a bit
-
-		w.Header().Set("Content-Type", x.C_RespHeader)
-		w.WriteHeader(c.HttpErr)
-	}
-
-	byteData, err := json.MarshalIndent(res, "", "    ")
+	byteData, err := json.MarshalIndent(stats, "", "    ")
 	if err != nil {
 		http.Error(w, x.ERR_JsonConvertData, http.StatusInternalServerError)
 		return
@@ -65,6 +33,95 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", x.C_RespHeader)
 	/* trunk-ignore(golangci-lint/errcheck) */
 	w.Write(byteData)
+}
+
+func websHandler(w http.ResponseWriter, r *http.Request) {
+
+	stats := new(x.StatsType)
+	x.RFillJsonStats(stats)
+
+	tmpl := template.Must(template.New("index").Parse(`
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.5">
+		<title>Nodelocker overview</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				background-color: #f4f4f4;
+				margin: 0;
+				padding: 0;
+			}
+			.container {
+				max-width: 800px;
+				margin: 20px auto;
+				padding: 20px;
+				background-color: #fff;
+				border-radius: 8px;
+				box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+			}
+			h1 {
+				text-align: center;
+			}
+			ul {
+				list-style: none;
+				padding: 0;
+			}
+			li {
+				margin-bottom: 5px;
+			}
+			.label {
+				font-weight: bold;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<h1>🏗️ Environment and host overview 🏗️</h1>
+			<br><hr><br>
+			<div id="stats">
+				<ul>
+					<li><span class="label">Valid environments:</span>
+						<ul>{{range .ValidEnvs}}
+							<li><span class="value">✅ {{.}}</span></li>
+						{{end}}</ul>
+					</li>
+					<br>
+					<li><span class="label">Locked environments:</span>
+						<ul>{{range .LockedEnvs}}
+							<li><span class="value">🔒 {{.}}</span></li>
+						{{end}}</ul>
+					</li>
+					<br>
+					<li><span class="label">Environments in maintenance mode:</span>
+						<ul>{{range .MaintEnvs}}
+							<li><span class="value">🚧 {{.}}</span></li>
+						{{end}}</ul>
+					</li>
+					<br>
+					<li><span class="label">Terminated, unusable environments:</span>
+						<ul>{{range .TermdEnvs}}
+							<li><span class="value">❌ {{.}}</span></li>
+						{{end}}</ul>
+					</li>
+					<br><hr><br>
+					<li><span class="label"> Locked hosts:</span>
+						<ul>{{range .LockedHosts}}
+							<li><span class="value">🔒 {{.}}</span></li>
+						{{end}}</ul>
+					</li>
+				</ul>
+			</div>
+		</div>
+	</body>
+	</html>
+	`))
+
+	if err := tmpl.Execute(w, stats); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func lockHandler(w http.ResponseWriter, r *http.Request) {
@@ -279,7 +336,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 		if x.MaintenanceEnv(c.Name) {
 			c.HttpErr = http.StatusOK
-			c.State = x.C_MAINTENANCE
+			c.State = x.C_STATE_MAINTENANCE
 			res.Messages = append(res.Messages, x.OK_EnvSetToMaintenance)
 		} else {
 			c.HttpErr = http.StatusForbidden
@@ -290,7 +347,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 		if x.TerminateEnv(c.Name) {
 			c.HttpErr = http.StatusOK
-			c.State = x.C_TERMINATED
+			c.State = x.C_STATE_TERMINATED
 			res.Messages = append(res.Messages, x.OK_EnvSetToTerminate)
 		} else {
 			c.HttpErr = http.StatusForbidden
@@ -362,7 +419,8 @@ func main() {
 
 	r.Use(middleware.Logger)
 
-	r.Get("/query", queryHandler)
+	r.Get("/status/json", jsonsHandler)
+	r.Get("/status/web", websHandler)
 	r.Get("/lock", lockHandler)
 	r.Get("/unlock", unlockHandler)
 	r.Get("/register", regHandler)

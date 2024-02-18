@@ -22,6 +22,14 @@ type WebResponseType struct {
 	User     string   `json:"user"`
 }
 
+type StatsType struct {
+	ValidEnvs   []string `json:"validenvs"`
+	LockedEnvs  []string `json:"lockedenvs"`
+	MaintEnvs   []string `json:"maintenvs"`
+	TermdEnvs   []string `json:"termdenvs"`
+	LockedHosts []string `json:"lockedhosts"`
+}
+
 const (
 	C_ADMIN     string = "admin"
 	C_ENV_LIST  string = "envlist"
@@ -33,9 +41,10 @@ const (
 	C_FAILED  string = "❌"
 	C_STARTED string = "🌐"
 
-	C_LOCKED      string = "locked"
-	C_TERMINATED  string = "termnd"
-	C_MAINTENANCE string = "maint"
+	C_STATE_VALID       string = "valid"
+	C_STATE_LOCKED      string = "locked"
+	C_STATE_TERMINATED  string = "termnd"
+	C_STATE_MAINTENANCE string = "maint"
 
 	C_RespHeader string = "application/json"
 	C_Secret     string = "XXXXXXX"
@@ -47,9 +56,7 @@ const (
 	ERR_NoTokenSpecified     string = "ERR: No 'token' parameter specified."
 	ERR_WrongTypeSpecified   string = "ERR: Wrong 'type' specified, must be 'env' or 'host'."
 	ERR_IllegalUser          string = "ERR: Illegal user."
-	ERR_CannotDeleteUser     string = "ERR: Cannot delete user."
-	ERR_UserExists           string = "ERR: User already exists."
-	ERR_UserSetupFailed      string = "ERR: User setup failed."
+	ERR_CannotDeleteUser     string = "ERR: User setup failed."
 	ERR_EnvLockFail          string = "ERR: Environment lock unsuccesful."
 	ERR_EnvCreationFail      string = "ERR: Creating a new enviromnent failed."
 	ERR_EnvUnlockFail        string = "ERR: Environment unlock failed."
@@ -61,6 +68,8 @@ const (
 	ERR_InvalidDateSpecified string = "ERR: Invalid 'lastday' specified, format is: YYYYMMDD."
 	ERR_NoAdminPresent       string = "ERR: No 'admin' user present, cannot continue."
 	ERR_LockedHostsInEnv     string = "ERR: Locked hosts in envm it cannot be locked."
+	ERR_UserExists           string = "ERR: User already exists."
+	ERR_UserSetupFailed      string = "ERR: Cannot setup user."
 
 	OK_UserPurged          string = "OK: User purged."
 	OK_EnvCreated          string = "OK: Environment created."

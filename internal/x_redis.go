@@ -2,6 +2,7 @@ package x
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -91,32 +92,32 @@ func REntityDelete(enType string, enName string) bool {
 	}
 }
 
-func RSetAddMember(setName string, member string) bool {
+// func RSetAddMember(setName string, member string) bool {
 
-	err := RConn.SAdd(setName, member).Err()
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	return true
-}
+// 	err := RConn.SAdd(setName, member).Err()
+// 	if err != nil {
+// 		fmt.Println(err.Error())
+// 	}
+// 	return true
+// }
 
-func RSetRemoveMember(setName string, member string) bool {
+// func RSetRemoveMember(setName string, member string) bool {
 
-	err := RConn.SRem(setName, member).Err()
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	return true
-}
+// 	err := RConn.SRem(setName, member).Err()
+// 	if err != nil {
+// 		fmt.Println(err.Error())
+// 	}
+// 	return true
+// }
 
-func RIsMemberOfSet(setName string, member string) bool {
+// func RIsMemberOfSet(setName string, member string) bool {
 
-	m, err := RConn.SIsMember(setName, member).Result()
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	return m
-}
+// 	m, err := RConn.SIsMember(setName, member).Result()
+// 	if err != nil {
+// 		fmt.Println(err.Error())
+// 	}
+// 	return m
+// }
 
 func RGetHostsInEnv(envName string) []string {
 
@@ -159,4 +160,74 @@ func RGetHostsInEnv(envName string) []string {
 
 	return resultList
 
+}
+
+// matchPattern should be C_TYPE_ENV or C_TYPE_HOST
+func RScanKeys(matchPattern string) []string {
+
+	var cursor uint64
+	keys := make([]string, 0)
+
+	for {
+		var (
+			result []string
+			err    error
+		)
+		result, cursor, err = RConn.Scan(cursor, matchPattern+":*", 10).Result()
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		keys = append(keys, result...)
+		if cursor == 0 {
+			break
+		}
+	}
+	return keys
+}
+
+func RFillJsonStats(r *StatsType) {
+
+	envs := RScanKeys(C_TYPE_ENV)
+	envPrefixLen := len(C_TYPE_ENV)
+	hostPrefixLen := len(C_TYPE_HOST)
+
+	for _, key := range envs {
+		result, err := RConn.HGetAll(key).Result()
+		if err != nil {
+			fmt.Printf("Error fetching data for key %s: %s\n", key, err)
+			continue
+		}
+
+		for field, value := range result {
+
+			switch {
+			case field == "state" && value == C_STATE_VALID:
+				r.ValidEnvs = append(r.ValidEnvs, key[envPrefixLen:])
+			case field == "state" && value == C_STATE_LOCKED:
+				r.LockedEnvs = append(r.LockedEnvs, key[envPrefixLen:])
+			case field == "state" && value == C_STATE_MAINTENANCE:
+				r.MaintEnvs = append(r.MaintEnvs, key[envPrefixLen:])
+			case field == "state" && value == C_STATE_TERMINATED:
+				r.TermdEnvs = append(r.TermdEnvs, key[envPrefixLen:])
+			}
+		}
+	}
+
+	hosts := RScanKeys(C_TYPE_HOST)
+
+	for _, key := range hosts {
+		result, err := RConn.HGetAll(key).Result()
+		if err != nil {
+			fmt.Printf("Error fetching data for key %s: %s\n", key, err)
+			continue
+		}
+
+		for field, value := range result {
+
+			switch {
+			case field == "state" && value == C_STATE_LOCKED:
+				r.LockedHosts = append(r.LockedHosts, key[hostPrefixLen:])
+			}
+		}
+	}
 }

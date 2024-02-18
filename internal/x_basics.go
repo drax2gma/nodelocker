@@ -187,7 +187,12 @@ func IsEnvLocked(envName string) bool {
 
 func CreateEnv(envName string) bool {
 
-	return RSetAddMember(C_ENV_LIST, envName)
+	// return RSetAddMember(C_ENV_LIST, envName)
+	c := NewCacheData()
+	c.Type = C_TYPE_ENV
+	c.Name = envName
+	c.State = C_STATE_VALID
+	return RSetLockData(&c)
 }
 
 func MaintenanceEnv(envName string) bool {
@@ -195,7 +200,7 @@ func MaintenanceEnv(envName string) bool {
 	c := NewCacheData()
 	c.Type = C_TYPE_ENV
 	c.Name = envName
-	c.State = C_MAINTENANCE
+	c.State = C_STATE_MAINTENANCE
 	return RSetLockData(&c)
 }
 
@@ -204,10 +209,9 @@ func TerminateEnv(envName string) bool {
 	c := NewCacheData()
 	c.Type = C_TYPE_ENV
 	c.Name = envName
-	c.State = C_TERMINATED
+	c.State = C_STATE_TERMINATED
 	p1 := RGetLockData(&c)
-	p2 := RSetRemoveMember(C_TYPE_ENV, envName)
-
+	p2 := RSetLockData(&c)
 	return p1 && p2
 }
 
@@ -234,7 +238,7 @@ func IsEnvContainHosts(envName string) bool {
 
 func DoLock(c *CacheDataType, res *WebResponseType) bool {
 
-	c.State = C_LOCKED
+	c.State = C_STATE_LOCKED
 
 	if c.Type == C_TYPE_ENV {
 
