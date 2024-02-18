@@ -188,8 +188,8 @@ func RScanKeys(matchPattern string) []string {
 func RFillJsonStats(r *StatsType) {
 
 	envs := RScanKeys(C_TYPE_ENV)
-	envPrefixLen := len(C_TYPE_ENV)
-	hostPrefixLen := len(C_TYPE_HOST)
+	envPrefixLen := len(C_TYPE_ENV) + 1
+	hostPrefixLen := len(C_TYPE_HOST) + 1
 
 	for _, key := range envs {
 		result, err := RConn.HGetAll(key).Result()
