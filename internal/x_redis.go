@@ -3,6 +3,7 @@ package x
 import (
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -182,6 +183,7 @@ func RScanKeys(matchPattern string) []string {
 			break
 		}
 	}
+	sort.Strings(keys)
 	return keys
 }
 

@@ -77,6 +77,27 @@ Describe 'Environment and host handling'
             The output should include "OK: Environment created."
         End
     End
+    Context 'admin create env3'
+        It 'should pass'
+            When call tests/helpers/admin_env_create.sh env3 adminpass
+            The output should include '"success": true'
+            The output should include "OK: Environment created."
+        End
+    End
+    Context 'admin create env4'
+        It 'should pass'
+            When call tests/helpers/admin_env_create.sh env4 adminpass
+            The output should include '"success": true'
+            The output should include "OK: Environment created."
+        End
+    End
+    Context 'admin create env5'
+        It 'should pass'
+            When call tests/helpers/admin_env_create.sh env5 adminpass
+            The output should include '"success": true'
+            The output should include "OK: Environment created."
+        End
+    End
     Context 'lock env1'
         It 'should pass'
             When call tests/helpers/env_lock.sh env1 user1 pass1 20310101
