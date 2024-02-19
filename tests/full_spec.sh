@@ -98,6 +98,13 @@ Describe 'Environment and host handling'
             The output should include "OK: Environment created."
         End
     End
+    Context 'admin create env5'
+        It 'should pass'
+            When call tests/helpers/admin_env_create.sh env5 adminpass
+            The output should include '"success": true'
+            The output should include "OK: Environment created."
+        End
+    End
     Context 'lock env1'
         It 'should pass'
             When call tests/helpers/env_lock.sh env1 user1 pass1 20310101
@@ -131,6 +138,27 @@ Describe 'Environment and host handling'
             When call tests/helpers/host_lock.sh env2-host2 user1 pass1 20320202
             The output should include '"success": true'
             The output should include "OK: Host has been locked succesfully."
+        End
+    End
+    Context 'lock env2-host3'
+        It 'should pass'
+            When call tests/helpers/host_lock.sh env2-host3 user1 pass1 20320202
+            The output should include '"success": true'
+            The output should include "OK: Host has been locked succesfully."
+        End
+    End
+    Context 'lock env5-host1'
+        It 'should pass'
+            When call tests/helpers/host_lock.sh env5-host1-a user1 pass1 20320202
+            The output should include '"success": true'
+            The output should include "OK: Host has been locked succesfully."
+        End
+    End
+    Context 'lock env6-host4'
+        It 'should fail, no such env'
+            When call tests/helpers/host_lock.sh env6-host4 user1 pass1 20320202
+            The output should include '"success": false'
+            The output should include "ERR: Parent environment is locked, cannot lock host."
         End
     End
     Context 'admin release env2'

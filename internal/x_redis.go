@@ -82,7 +82,7 @@ func REntityDelete(enType string, enName string) bool {
 
 	err := RConn.HDel(enType, enName).Err()
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Fatal(err.Error())
 	}
 
 	// Check if entity has gone
@@ -105,7 +105,7 @@ func RGetHostsInEnv(envName string) []string {
 		// Use SCAN command to get keys matching the pattern
 		keys, nextCursor, err := RConn.Scan(cursor, C_TYPE_HOST+":*", 0).Result()
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Fatal(err.Error())
 		}
 
 		// Loop through the keys and check if 'env' field contains envName
@@ -113,7 +113,7 @@ func RGetHostsInEnv(envName string) []string {
 			// Use HGET command to get the value of the 'env' field
 			parent, err := RConn.HGet(key, C_PARENT).Result()
 			if err != nil {
-				fmt.Println(err.Error())
+				log.Fatal(err.Error())
 			}
 
 			if parent == envName {

@@ -75,7 +75,9 @@ func GetTimeFromNow(yyyymmdd string) time.Duration {
 func IsValidDate(dateParam string) bool {
 
 	if len(dateParam) != 8 {
-		fmt.Println("bad date length")
+		if DEBUG {
+			fmt.Println("bad date length")
+		}
 		return false // Bad date length
 	}
 
@@ -129,22 +131,30 @@ func CheckType(c *CacheDataType, res *WebResponseType) bool {
 
 func IsExistingUser(userName string) bool {
 
-	fmt.Println("IsExistingUser <<", userName)
+	if DEBUG {
+		fmt.Println("IsExistingUser <<", userName)
+	}
 
 	_, err := RConn.HGet("user", userName).Result()
 
 	if err == nil {
-		fmt.Println("IsExistingUser >>", true)
+		if DEBUG {
+			fmt.Println("IsExistingUser >>", true)
+		}
 		return true
 	} else {
-		fmt.Println("IsExistingUser >>", false)
+		if DEBUG {
+			fmt.Println("IsExistingUser >>", false)
+		}
 		return false
 	}
 }
 
 func IsValidUser(userName string, userToken string) bool {
 
-	fmt.Println("IsValidUser <<", userName)
+	if DEBUG {
+		fmt.Println("IsValidUser <<", userName)
+	}
 
 	redisPwd, err := RConn.HGet("user", userName).Result()
 
@@ -152,14 +162,20 @@ func IsValidUser(userName string, userToken string) bool {
 		// found user & password
 
 		if redisPwd == CryptString(userToken) {
-			fmt.Println("IsValidUser >>", true)
+			if DEBUG {
+				fmt.Println("IsValidUser >>", true)
+			}
 			return true
 		} else {
-			fmt.Println("IsValidUser >>", false)
+			if DEBUG {
+				fmt.Println("IsValidUser >>", false)
+			}
 			return false
 		}
 	} else {
-		fmt.Println("IsValidUser >> NO_USER")
+		if DEBUG {
+			fmt.Println("IsValidUser >> NO_USER")
+		}
 		return false
 	}
 }
@@ -170,7 +186,9 @@ func GetEnvFromHost(hostName string) string {
 	separators := []string{"-", "_", "/", ".", "|"}
 	pos := 0
 
-	fmt.Println("GetEnvFromHost <<", hostName)
+	if DEBUG {
+		fmt.Println("GetEnvFromHost <<", hostName)
+	}
 
 	for i, char := range hostName {
 		for _, separator := range separators {
@@ -182,7 +200,9 @@ func GetEnvFromHost(hostName string) string {
 	}
 
 	ret := hostName[:pos]
-	fmt.Println("GetEnvFromHost >>", ret)
+	if DEBUG {
+		fmt.Println("GetEnvFromHost >>", ret)
+	}
 
 	return ret
 }
@@ -194,7 +214,8 @@ func IsEnvLocked(envName string) bool {
 	c.Name = envName
 
 	if !RGetLockData(&c) {
-		log.Fatal("ERR: IsEnvLocked")
+		// no such env, returning locked state
+		return true
 	}
 
 	switch {

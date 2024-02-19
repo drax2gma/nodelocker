@@ -31,6 +31,8 @@ type StatsType struct {
 }
 
 const (
+	DEBUG bool = false
+
 	C_ADMIN     string = "admin"
 	C_ENV_LIST  string = "envlist"
 	C_TYPE_ENV  string = "env"
