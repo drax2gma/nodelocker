@@ -16,7 +16,7 @@ import (
 	x "github.com/drax2gma/nodelocker/internal"
 )
 
-func jsonsHandler(w http.ResponseWriter, r *http.Request) {
+func jsonStatHandler(w http.ResponseWriter, r *http.Request) {
 
 	stats := new(x.StatsType)
 	x.RFillJsonStats(stats)
@@ -35,7 +35,7 @@ func jsonsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(byteData)
 }
 
-func websHandler(w http.ResponseWriter, r *http.Request) {
+func webStatHandler(w http.ResponseWriter, r *http.Request) {
 
 	stats := new(x.StatsType)
 	x.RFillJsonStats(stats)
@@ -314,7 +314,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 	} else if action == "env-create" { // Add a new environment
 
-		if x.CreateEnv(c.Name) {
+		if x.EnvCreate(c.Name) {
 			c.HttpErr = http.StatusOK
 			res.Messages = append(res.Messages, x.OK_EnvCreated)
 		} else {
@@ -324,7 +324,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 	} else if action == "env-unlock" { // Unlock an env from maintenance or terminate state
 
-		if x.UnlockEnv(c.Name) {
+		if x.EnvUnlock(c.Name) {
 			c.HttpErr = http.StatusOK
 			res.Messages = append(res.Messages, x.OK_EnvUnlocked)
 		} else {
@@ -334,7 +334,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 	} else if action == "env-maintenance" { // Setup an env for maintenance
 
-		if x.MaintenanceEnv(c.Name) {
+		if x.EnvMaintenance(c.Name) {
 			c.HttpErr = http.StatusOK
 			c.State = x.C_STATE_MAINTENANCE
 			res.Messages = append(res.Messages, x.OK_EnvSetToMaintenance)
@@ -345,7 +345,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 	} else if action == "env-terminate" { // Lock an env indefinately
 
-		if x.TerminateEnv(c.Name) {
+		if x.EnvTerminate(c.Name) {
 			c.HttpErr = http.StatusOK
 			c.State = x.C_STATE_TERMINATED
 			res.Messages = append(res.Messages, x.OK_EnvSetToTerminate)
@@ -356,7 +356,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 	} else if action == "host-unlock" { // Unlock a stuck, locked host
 
-		if x.UnlockHost(c.Name) {
+		if x.HostUnlock(c.Name) {
 			c.HttpErr = http.StatusOK
 			res.Messages = append(res.Messages, x.OK_HostUnlocked)
 		} else {
@@ -419,8 +419,8 @@ func main() {
 
 	r.Use(middleware.Logger)
 
-	r.Get("/status/json", jsonsHandler)
-	r.Get("/status/web", websHandler)
+	r.Get("/status/json", jsonStatHandler)
+	r.Get("/status/web", webStatHandler)
 	r.Get("/lock", lockHandler)
 	r.Get("/unlock", unlockHandler)
 	r.Get("/register", regHandler)

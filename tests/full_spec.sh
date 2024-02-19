@@ -32,6 +32,13 @@ Describe 'User existence and modification'
             The output should include "OK: User 'user1' created."
         End
     End
+    Context 'add user1 again'
+        It 'should fail, existing user'
+            When call tests/helpers/user_add.sh user1 pass1
+            The output should include '"success": false' # Forbidden
+            The output should include "ERR: User already exists."
+        End
+    End
     Context 'add user2'
         It 'should pass'
             When call tests/helpers/user_add.sh user2 pass2
@@ -46,16 +53,16 @@ Describe 'User existence and modification'
             The output should include "OK: User 'user3' created."
         End
     End
-    Context 'admin purge user2 with bad admin password'
+    Context 'admin purge user3 with bad admin password'
         It 'should fail with unauthenticated'
-            When call tests/helpers/admin_user_purge.sh user2 adminBADpass
+            When call tests/helpers/admin_user_purge.sh user3 adminBADpass
             The output should include '"success": false' # Forbidden
             The output should include "ERR: Illegal user."
         End
     End
-    Context 'admin purge user2 with good admin password'
+    Context 'admin purge user3 with good admin password'
         It 'should pass'
-            When call tests/helpers/admin_user_purge.sh user2 adminpass
+            When call tests/helpers/admin_user_purge.sh user3 adminpass
             The output should include '"success": true' # OK
             The output should include "OK: User purged."
         End
@@ -91,13 +98,6 @@ Describe 'Environment and host handling'
             The output should include "OK: Environment created."
         End
     End
-    Context 'admin create env5'
-        It 'should pass'
-            When call tests/helpers/admin_env_create.sh env5 adminpass
-            The output should include '"success": true'
-            The output should include "OK: Environment created."
-        End
-    End
     Context 'lock env1'
         It 'should pass'
             When call tests/helpers/env_lock.sh env1 user1 pass1 20310101
@@ -114,14 +114,14 @@ Describe 'Environment and host handling'
     End
     Context 'lock env2-host2'
         It 'should fail, deleted user'
-            When call tests/helpers/host_lock.sh env2-host2 user2 pass2 20320202
+            When call tests/helpers/host_lock.sh env2-host2 user3 pass3 20320202
             The output should include '"success": false'
             The output should include "ERR: Illegal user."
         End
     End
     Context 'lock env2-host2'
         It 'should fail, bad user password'
-            When call tests/helpers/host_lock.sh env2-host2 user1 pass2 20320202
+            When call tests/helpers/host_lock.sh env2-host2 user1 BADPASS 20320202
             The output should include '"success": false'
             The output should include "ERR: Illegal user."
         End
@@ -133,17 +133,25 @@ Describe 'Environment and host handling'
             The output should include "OK: Host has been locked succesfully."
         End
     End
-    # user3 wants to lock env2-host2
+    Context 'admin release env2'
+        It 'should pass'
+            When call tests/helpers/admin_env_unlock.sh env2 adminpass
+            The output should include '"success": true'
+            The output should include "OK: Environment unlocked."
+        End
+    End
+    Context 'admin terminate env3'
+        It 'should pass'
+            When call tests/helpers/admin_env_terminate.sh env3 adminpass
+            The output should include '"success": true'
+            The output should include "OK: Environment terminated."
+        End
+    End
+    Context 'admin maintenance env4'
+        It 'should pass'
+            When call tests/helpers/admin_env_maintenance.sh env4 adminpass
+            The output should include '"success": true'
+            The output should include "OK: Environment is in maintenance mode now."
+        End
+    End
 End
-
-# Describe 'Releasing environment with admin'
-# # admin maintenance env1 --> ok (maint and terminate works for admin from any status)
-#     Context ''
-#         It ''
-#             When call tests/helpers/admin_env_unlock.sh env1 adminpass
-#             The output should include 'OK'
-#             The status should eq 0
-#         End
-#     End
-# End
-# End

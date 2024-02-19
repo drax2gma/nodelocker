@@ -45,12 +45,12 @@ func RGetLockData(c *CacheDataType) bool {
 
 	var resultsMap map[string]string
 
-	result, err := RConn.HMGet(c.Type+":"+c.Name, "state", "user", "lastday").Result()
+	result, err := RConn.HMGet(c.Type+":"+c.Name, "state", "parent", "user", "lastday").Result()
 	if err != nil || result[0] == nil {
 		return false
 	}
 
-	fields := []string{"state", "user", "lastday"}
+	fields := []string{"state", "parent", "user", "lastday"}
 	resultsMap = make(map[string]string)
 
 	for i, field := range fields {
@@ -68,7 +68,7 @@ func RGetLockData(c *CacheDataType) bool {
 // Do not forget to fill x.CacheData before function call!
 func RSetLockData(c *CacheDataType) bool {
 
-	err := RConn.HMSet(c.Type+":"+c.Name, map[string]interface{}{
+	err := RConn.HMSet(c.Type+":"+c.Name, map[string]any{
 		"state":   c.State,
 		"parent":  c.Parent,
 		"user":    c.User,
@@ -93,40 +93,13 @@ func REntityDelete(enType string, enName string) bool {
 	}
 }
 
-// func RSetAddMember(setName string, member string) bool {
-
-// 	err := RConn.SAdd(setName, member).Err()
-// 	if err != nil {
-// 		fmt.Println(err.Error())
-// 	}
-// 	return true
-// }
-
-// func RSetRemoveMember(setName string, member string) bool {
-
-// 	err := RConn.SRem(setName, member).Err()
-// 	if err != nil {
-// 		fmt.Println(err.Error())
-// 	}
-// 	return true
-// }
-
-// func RIsMemberOfSet(setName string, member string) bool {
-
-// 	m, err := RConn.SIsMember(setName, member).Result()
-// 	if err != nil {
-// 		fmt.Println(err.Error())
-// 	}
-// 	return m
-// }
-
 func RGetHostsInEnv(envName string) []string {
 
 	// Create a cursor to iterate over hash sets
 	var cursor uint64 = 0
 	var resultList []string
 
-	fmt.Printf("Checking hosts in %s env...", envName)
+	fmt.Printf("Checking hosts in '%s' environment...", envName)
 
 	for {
 		// Use SCAN command to get keys matching the pattern
