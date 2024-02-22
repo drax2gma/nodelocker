@@ -18,7 +18,7 @@ import (
 
 func jsonStatHandler(w http.ResponseWriter, r *http.Request) {
 
-	stats := new(x.StatsType)
+	stats := new(x.Stats)
 	x.RFillJsonStats(stats)
 
 	w.Header().Set("Content-Type", x.C_RespHeader)
@@ -37,7 +37,7 @@ func jsonStatHandler(w http.ResponseWriter, r *http.Request) {
 
 func webStatHandler(w http.ResponseWriter, r *http.Request) {
 
-	stats := new(x.StatsType)
+	stats := new(x.Stats)
 	x.RFillJsonStats(stats)
 
 	tmpl := template.Must(template.New("index").Parse(`
@@ -126,8 +126,8 @@ func webStatHandler(w http.ResponseWriter, r *http.Request) {
 
 func lockHandler(w http.ResponseWriter, r *http.Request) {
 
-	res := x.NewWebResponse()
-	c := x.NewCacheData()
+	res := new(x.WebResponse)
+	c := new(x.LockData)
 
 	c.Type = r.URL.Query().Get("type")
 	c.Name = r.URL.Query().Get("name")
@@ -145,7 +145,12 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check 'type' defined in GET request
-	x.CheckType(&c, &res)
+	t := x.CheckType(c.Type)
+	if t.IsError {
+
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, x.ERR_WrongTypeSpecified)
+	}
 
 	// no 'name' defined in GET request
 	if c.Name == "" {
@@ -155,7 +160,7 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// trying to lock an env that contain locked host(s)
-	if c.Type == x.C_TYPE_ENV && x.IsEnvContainHosts(c.Name) {
+	if c.Type == x.C_TYPE_ENV && x.IsEnvContainsHosts(c.Name) {
 
 		c.HttpErr = http.StatusForbidden
 		res.Messages = append(res.Messages, x.ERR_LockedHostsInEnv)
@@ -178,16 +183,22 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 	// on C_HTTP_OK lock
 	if c.HttpErr == x.C_HTTP_OK {
 
-		x.DoLock(&c, &res)
+		switch {
+		case c.Type == x.C_TYPE_ENV:
+			x.EnvLock(c, res)
+		case c.Type == x.C_TYPE_HOST:
+			x.HostLock(c, res)
+		default:
+		}
 	}
 
-	returnWebResponse(w, c.HttpErr, &res)
+	returnWebResponse(w, c.HttpErr, res)
 }
 
 func unlockHandler(w http.ResponseWriter, r *http.Request) {
 
-	res := x.NewWebResponse()
-	c := x.NewCacheData()
+	res := new(x.WebResponse)
+	c := new(x.LockData)
 
 	c.Type = r.URL.Query().Get("type")
 	c.Name = r.URL.Query().Get("name")
@@ -204,7 +215,12 @@ func unlockHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check 'type' defined in GET request
-	x.CheckType(&c, &res)
+	t := x.CheckType(c.Type)
+	if t.IsError {
+
+		c.HttpErr = http.StatusBadRequest
+		res.Messages = append(res.Messages, x.ERR_WrongTypeSpecified)
+	}
 
 	// Check for missing entity name
 	if c.Name == "" {
@@ -222,7 +238,7 @@ func unlockHandler(w http.ResponseWriter, r *http.Request) {
 	if !x.REntityDelete(c.Type, c.Name) {
 
 		c.HttpErr = http.StatusForbidden
-		res.Messages = append(res.Messages, x.ERR_IllegalUser)
+		res.Messages = append(res.Messages, "ERR: EntityDelete failed !!!")
 
 	} else {
 
@@ -230,13 +246,13 @@ func unlockHandler(w http.ResponseWriter, r *http.Request) {
 		res.Messages = append(res.Messages, "")
 	}
 
-	returnWebResponse(w, c.HttpErr, &res)
+	returnWebResponse(w, c.HttpErr, res)
 }
 
 func regHandler(w http.ResponseWriter, r *http.Request) {
 
-	res := x.NewWebResponse()
-	c := x.NewCacheData()
+	res := new(x.WebResponse)
+	c := new(x.LockData)
 
 	c.User = r.URL.Query().Get("user")
 	c.Token = r.URL.Query().Get("token")
@@ -286,13 +302,13 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	returnWebResponse(w, c.HttpErr, &res)
+	returnWebResponse(w, c.HttpErr, res)
 }
 
 func adminHandler(w http.ResponseWriter, r *http.Request) {
 
-	res := x.NewWebResponse()
-	c := x.NewCacheData()
+	res := new(x.WebResponse)
+	c := new(x.LockData)
 
 	action := r.URL.Query().Get("action")
 	c.Name = r.URL.Query().Get("name")
@@ -369,10 +385,10 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 		res.Messages = append(res.Messages, "ERR: Illegal 'action' parameter")
 	}
 
-	returnWebResponse(w, c.HttpErr, &res)
+	returnWebResponse(w, c.HttpErr, res)
 }
 
-func returnWebResponse(w http.ResponseWriter, httpErr int, retData *x.WebResponseType) {
+func returnWebResponse(w http.ResponseWriter, httpErr int, retData *x.WebResponse) {
 
 	// set 200 instead of C_HTTP_OK on http status
 	if httpErr == x.C_HTTP_OK {

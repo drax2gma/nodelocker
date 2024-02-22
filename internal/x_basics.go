@@ -9,39 +9,47 @@ import (
 	"time"
 )
 
-func NewWebResponse() WebResponseType {
+// Wants: n/a
+//
+// Returns: empty WebResponse structure
+// func NewWebResponse() WebResponse {
 
-	var r WebResponseType
+// 	var r WebResponse
 
-	r.Type = ""
-	r.Name = ""
-	r.Parent = ""
-	r.State = ""
-	r.LastDay = ""
-	r.User = ""
-	r.Success = false
-	r.Messages = []string{}
+// 	r.Type = ""
+// 	r.Name = ""
+// 	r.Parent = ""
+// 	r.State = ""
+// 	r.LastDay = ""
+// 	r.User = ""
+// 	r.Success = false
+// 	r.Messages = []string{}
 
-	return r
-}
+// 	return r
+// }
 
-func NewCacheData() CacheDataType {
+// Wants: n/a
+//
+// Returns: empty LockData structure
+// func NewLockData() LockData {
 
-	var c CacheDataType
+// 	var c LockData
 
-	c.Type = ""
-	c.Name = ""
-	c.Parent = ""
-	c.State = ""
-	c.LastDay = ""
-	c.User = ""
-	c.Token = ""
-	c.HttpErr = 0
+// 	c.Type = ""
+// 	c.Name = ""
+// 	c.Parent = ""
+// 	c.State = ""
+// 	c.LastDay = ""
+// 	c.User = ""
+// 	c.Token = ""
+// 	c.HttpErr = 0
 
-	return c
-}
+// 	return c
+// }
 
-// Crypt a plain string into sha1 hash string
+// Wants: a plain string
+//
+// Returns: sha1 hash of input string
 func CryptString(plain string) string {
 
 	const preSalt string = "68947b1f416c3a5655e1ff9e7c7935f6"
@@ -54,6 +62,9 @@ func CryptString(plain string) string {
 	return hexString
 }
 
+// Wants: a string containing a date in YYYYMMDD format
+//
+// Returns: time from now till the last second of YYYYMMMDD specified date
 func GetTimeFromNow(yyyymmdd string) time.Duration {
 
 	// Parse the YYYYMMDD formatted datetime string into a time.Time object
@@ -72,6 +83,9 @@ func GetTimeFromNow(yyyymmdd string) time.Duration {
 	return duration
 }
 
+// Wants: a string with YYYYMMDD date
+//
+// Returns: `true` if that date is a valid date
 func IsValidDate(dateParam string) bool {
 
 	if len(dateParam) != 8 {
@@ -106,29 +120,39 @@ func IsValidDate(dateParam string) bool {
 	return true
 }
 
-// check 'type' defined in GET request
-func CheckType(c *CacheDataType, res *WebResponseType) bool {
+// Wants: a string which should be C_TYPE_ENV or C_TYPE_HOST
+//
+// Returns: Specific ErrorCheckType
+func CheckType(t string) *ErrorCheckType {
 
-	if c.Type == C_TYPE_ENV || c.Type == C_TYPE_HOST {
+	r := new(ErrorCheckType)
 
-		res.Type = c.Type
-		return true
+	if t == C_TYPE_ENV || t == C_TYPE_HOST {
 
-	} else if c.Type == "" {
+		r.IsError = false
+		r.HttpErrCode = C_HTTP_OK
+		r.ErrorMessage = ""
+		return r
 
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_NoTypeSpecified)
-		return false
+	} else if t == "" {
+
+		r.IsError = true
+		r.HttpErrCode = http.StatusBadRequest
+		r.ErrorMessage = ERR_NoTypeSpecified
+		return r
 
 	} else {
 
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, ERR_WrongTypeSpecified)
-		return false
+		r.IsError = true
+		r.HttpErrCode = http.StatusBadRequest
+		r.ErrorMessage = ERR_WrongTypeSpecified
+		return r
 	}
-
 }
 
+// Wants: username
+//
+// Returns: `true` if user exists
 func IsExistingUser(userName string) bool {
 
 	if DEBUG {
@@ -150,6 +174,9 @@ func IsExistingUser(userName string) bool {
 	}
 }
 
+// Wants: username, usertoken
+//
+// Returns: `true` if user is valid (password is matching)
 func IsValidUser(userName string, userToken string) bool {
 
 	if DEBUG {
@@ -180,7 +207,9 @@ func IsValidUser(userName string, userToken string) bool {
 	}
 }
 
-// acquire the env from the hostname automagically
+// Wants: hostname
+//
+// Returns: first tag from full hostname by separator character list
 func GetEnvFromHost(hostName string) string {
 
 	separators := []string{"-", "_", "/", ".", "|"}
@@ -207,78 +236,110 @@ func GetEnvFromHost(hostName string) string {
 	return ret
 }
 
-func IsEnvLocked(envName string) bool {
-
-	c := NewCacheData()
-	c.Type = C_TYPE_ENV
-	c.Name = envName
-
-	if !RGetLockData(&c) {
-		// no such env, returning locked state
-		return true
-	}
-
-	switch {
-	case c.State == C_STATE_VALID:
-		return false
-	case c.State == "":
-		return false
-	default:
-		return true
-	}
-}
-
 func EnvCreate(envName string) bool {
 
-	// return RSetAddMember(C_ENV_LIST, envName)
-	c := NewCacheData()
+	c := new(LockData)
 	c.Type = C_TYPE_ENV
 	c.Name = envName
 	c.State = C_STATE_VALID
-	return RSetLockData(&c)
+	return RLockSetter(c)
 }
 
 func EnvMaintenance(envName string) bool {
 
-	c := NewCacheData()
+	c := new(LockData)
 	c.Type = C_TYPE_ENV
 	c.Name = envName
 	c.State = C_STATE_MAINTENANCE
-	return RSetLockData(&c)
+	return RLockSetter(c)
 }
 
 func EnvTerminate(envName string) bool {
 
-	c := NewCacheData()
+	c := new(LockData)
 	c.Type = C_TYPE_ENV
 	c.Name = envName
 
-	p1 := RGetLockData(&c)
-
+	c = RLockGetter(c.Type + ":" + c.Name)
 	c.State = C_STATE_TERMINATED
+	return RLockSetter(c)
+}
 
-	p2 := RSetLockData(&c)
+// Wants: environment name
+//
+// Returns: Specific ErrorCheckType
+func EnvLockStatus(envName string) *ErrorCheckType {
 
-	return p1 && p2
+	r := new(ErrorCheckType)
+	ld := RLockGetter(C_TYPE_ENV + ":" + envName)
+
+	switch {
+	case ld.HttpErr == http.StatusNoContent:
+		r.IsError = true
+		r.HttpErrCode = http.StatusNoContent
+
+	case ld.State == C_STATE_LOCKED:
+		// no such env, returning locked state
+		r.IsError = false
+		r.HttpErrCode = http.StatusLocked
+
+	case ld.State == C_STATE_VALID:
+		r.IsError = false
+		r.HttpErrCode = http.StatusAccepted
+
+	case ld.State == "":
+		r.IsError = false
+		r.HttpErrCode = http.StatusAccepted
+
+	default:
+		r.IsError = true
+		r.HttpErrCode = http.StatusInternalServerError
+	}
+
+	return r
+}
+
+// Wants: filled LockData
+//
+// Returns: `true` if everything went fine
+func EnvLock(c *LockData, res *WebResponse) bool {
+
+	db := RLockGetter(C_TYPE_ENV + ":" + c.Name)
+
+	// normal users can modify only their own records
+	if c.User != C_ADMIN {
+		if c.User != db.User && len(db.User) > 0 {
+			res.Messages = append(res.Messages, ERR_LockedByAnotherUser)
+			c.HttpErr = http.StatusForbidden
+			return false
+		}
+	}
+
+	c.Parent = "n/a"
+	c.State = C_STATE_LOCKED
+	res.Messages = append(res.Messages, OK_EnvLocked)
+
+	if RLockSetter(c) { // OK
+		c.HttpErr = http.StatusOK
+		return true
+
+	} else { // ERROR
+		res.Messages = append(res.Messages, ERR_EnvLockFail)
+		c.HttpErr = http.StatusForbidden
+		return false
+	}
 }
 
 func EnvUnlock(envName string) bool {
 
-	c := NewCacheData()
+	c := new(LockData)
 	c.Type = C_TYPE_ENV
 	c.Name = envName
 	c.State = C_STATE_VALID
-	return RSetLockData(&c)
-
+	return RLockSetter(c)
 }
 
-func HostUnlock(hostName string) bool {
-
-	return REntityDelete(C_TYPE_HOST, hostName)
-
-}
-
-func IsEnvContainHosts(envName string) bool {
+func IsEnvContainsHosts(envName string) bool {
 
 	if len(RGetHostsInEnv(envName)) > 0 {
 		return true
@@ -287,52 +348,71 @@ func IsEnvContainHosts(envName string) bool {
 	}
 }
 
-func DoLock(c *CacheDataType, res *WebResponseType) bool {
+func IsHostLocked(hostName string) bool {
+
+	c := new(LockData)
+	c.Type = C_TYPE_HOST
+	c.Name = hostName
+
+	c = RLockGetter(c.Type + ":" + c.Name)
+	if c.State == C_STATE_LOCKED {
+		return false
+	} else {
+		return true
+	}
+}
+
+// Wants: filled LockData
+//
+// Returns: `true` if everything went fine
+func HostLock(c *LockData, res *WebResponse) bool {
+
+	c.Parent = GetEnvFromHost(c.Name)             // parent env
+	pl := EnvLockStatus(c.Parent)                 // parent locking status
+	db := RLockGetter(C_TYPE_HOST + ":" + c.Name) // host locking status
+
+	if pl.HttpErrCode == http.StatusLocked { // parent env has been locked
+		res.Messages = append(res.Messages, ERR_ParentEnvLockFail)
+		c.HttpErr = http.StatusForbidden
+		return false
+	}
+
+	if pl.HttpErrCode == http.StatusNoContent { // parent env not defined
+		res.Messages = append(res.Messages, ERR_ParentEnvNil)
+		c.HttpErr = http.StatusForbidden
+		return false
+	}
+
+	if c.State == C_STATE_LOCKED {
+		res.Messages = append(res.Messages, ERR_HostLockFail)
+		c.HttpErr = http.StatusForbidden
+		return false
+	}
+
+	// normal users can modify only their own records
+	if c.User != C_ADMIN {
+		if c.User != db.User && len(db.User) > 0 {
+			res.Messages = append(res.Messages, ERR_LockedByAnotherUser)
+			c.HttpErr = http.StatusForbidden
+			return false
+		}
+	}
 
 	c.State = C_STATE_LOCKED
 
-	if c.Type == C_TYPE_ENV {
-
-		c.Parent = "n/a"
-		res.Messages = append(res.Messages, OK_EnvLocked)
-
-		if RSetLockData(c) { // OK
-			c.HttpErr = http.StatusOK
-			return true
-
-		} else { // ERROR
-			res.Messages = append(res.Messages, ERR_EnvLockFail)
-			c.HttpErr = http.StatusForbidden
-			return false
-
-		}
-
-	} else if c.Type == C_TYPE_HOST {
-
-		c.Parent = GetEnvFromHost(c.Name)
-
-		if IsEnvLocked(c.Parent) { // parent env has been locked
-			res.Messages = append(res.Messages, ERR_ParentEnvLockFail)
-			c.HttpErr = http.StatusForbidden
-			return false
-		}
-
+	if RLockSetter(c) { // OK
 		res.Messages = append(res.Messages, OK_HostLocked)
+		c.HttpErr = http.StatusOK
+		return true
 
-		if RSetLockData(c) { // OK
-			c.HttpErr = http.StatusOK
-			return true
-
-		} else { // ERROR
-			res.Messages = append(res.Messages, ERR_HostLockFail)
-			c.HttpErr = http.StatusForbidden
-			return false
-		}
-
-	} else { // illegal type
-
-		res.Messages = append(res.Messages, ERR_WrongTypeSpecified)
-		c.HttpErr = http.StatusInternalServerError
+	} else { // ERROR
+		res.Messages = append(res.Messages, ERR_HostLockFail)
+		c.HttpErr = http.StatusForbidden
 		return false
 	}
+}
+
+func HostUnlock(hostName string) bool {
+
+	return REntityDelete(C_TYPE_HOST, hostName)
 }

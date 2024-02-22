@@ -113,7 +113,7 @@ Describe 'Environment and host handling'
         End
     End
     Context 'lock env1-host1'
-        It 'should fail, env locked'
+        It 'should fail, env1 locked'
             When call tests/helpers/host_lock.sh env1-host1 user1 pass1 20310101
             The output should include '"success": false'
             The output should include "ERR: Parent environment is locked, cannot lock host."
@@ -140,6 +140,13 @@ Describe 'Environment and host handling'
             The output should include "OK: Host has been locked succesfully."
         End
     End
+    Context 'lock env2-host2'
+        It 'should fail, locked by user1'
+            When call tests/helpers/host_lock.sh env2-host2 user2 pass2 20320202
+            The output should include '"success": false'
+            The output should include "ERR:"
+        End
+    End
     Context 'lock env2-host3'
         It 'should pass'
             When call tests/helpers/host_lock.sh env2-host3 user1 pass1 20320202
@@ -158,7 +165,7 @@ Describe 'Environment and host handling'
         It 'should fail, no such env'
             When call tests/helpers/host_lock.sh env6-host4 user1 pass1 20320202
             The output should include '"success": false'
-            The output should include "ERR: Parent environment is locked, cannot lock host."
+            The output should include "ERR: Parent env not defined, admin can add it."
         End
     End
     Context 'admin release env2'

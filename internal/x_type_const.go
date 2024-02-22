@@ -1,6 +1,6 @@
 package x
 
-type CacheDataType struct {
+type LockData struct {
 	Type    string `json:"type"`
 	Name    string `json:"name"`
 	Parent  string `json:"parent"`
@@ -11,7 +11,7 @@ type CacheDataType struct {
 	HttpErr int    `json:"httperr"`
 }
 
-type WebResponseType struct {
+type WebResponse struct {
 	Success  bool     `json:"success"`
 	Messages []string `json:"messages"`
 	Type     string   `json:"type"`
@@ -22,12 +22,18 @@ type WebResponseType struct {
 	User     string   `json:"user"`
 }
 
-type StatsType struct {
+type Stats struct {
 	ValidEnvs   []string `json:"validenvs"`
 	LockedEnvs  []string `json:"lockedenvs"`
 	MaintEnvs   []string `json:"maintenvs"`
 	TermdEnvs   []string `json:"termdenvs"`
 	LockedHosts []string `json:"lockedhosts"`
+}
+
+type ErrorCheckType struct {
+	IsError      bool
+	HttpErrCode  int
+	ErrorMessage string
 }
 
 const (
@@ -64,14 +70,16 @@ const (
 	ERR_EnvUnlockFail        string = "ERR: Environment unlock failed."
 	ERR_EnvSetMaintFailFail  string = "ERR: Environment maintenance set failed."
 	ERR_EnvSetTermFail       string = "ERR: Environment termination failed."
+	ERR_ParentEnvNil         string = "ERR: Parent env not defined, admin can add it."
 	ERR_HostLockFail         string = "ERR: Host lock unsuccesful."
 	ERR_ParentEnvLockFail    string = "ERR: Parent environment is locked, cannot lock host."
 	ERR_HostUnlockFail       string = "ERR: Host unlock failed."
 	ERR_InvalidDateSpecified string = "ERR: Invalid 'lastday' specified, format is: YYYYMMDD."
 	ERR_NoAdminPresent       string = "ERR: No 'admin' user present, cannot continue."
-	ERR_LockedHostsInEnv     string = "ERR: Locked hosts in envm it cannot be locked."
+	ERR_LockedHostsInEnv     string = "ERR: Locked hosts in env, it cannot be locked."
 	ERR_UserExists           string = "ERR: User already exists."
 	ERR_UserSetupFailed      string = "ERR: Cannot setup user."
+	ERR_LockedByAnotherUser  string = "ERR: This entity is locked by another user !!!"
 
 	OK_UserPurged          string = "OK: User purged."
 	OK_EnvCreated          string = "OK: Environment created."

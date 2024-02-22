@@ -3,6 +3,7 @@ package x
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"sort"
 	"time"
 
@@ -40,33 +41,38 @@ func RSetExpire(key string, expire time.Duration) bool {
 	return errExp == nil
 }
 
-// Do not forget to fill x.CacheData before function call!
-func RGetLockData(c *CacheDataType) bool {
+// Usually key := 'entityType:entityName'
+func RLockGetter(key string) *LockData {
 
+	c := new(LockData)
 	var resultsMap map[string]string
 
-	result, err := RConn.HMGet(c.Type+":"+c.Name, "state", "parent", "user", "lastday").Result()
-	if err != nil || result[0] == nil {
-		return false
+	result, err := RConn.HMGet(key, "parent", "state", "user", "lastday").Result()
+	if err != nil || result[0] == nil { // no record found
+		c.HttpErr = http.StatusNoContent
+		return c
 	}
 
-	fields := []string{"state", "parent", "user", "lastday"}
+	fields := []string{"parent", "state", "user", "lastday"}
 	resultsMap = make(map[string]string)
 
 	for i, field := range fields {
 		resultsMap[field] = result[i].(string)
 	}
 
-	c.State = resultsMap["state"]
 	c.Parent = resultsMap["parent"]
+	c.State = resultsMap["state"]
 	c.User = resultsMap["user"]
 	c.LastDay = resultsMap["lastday"]
+	c.HttpErr = http.StatusOK
 
-	return true
+	return c
 }
 
-// Do not forget to fill x.CacheData before function call!
-func RSetLockData(c *CacheDataType) bool {
+// Do not forget to fill x.LockData before function call!
+//
+// Returns `true` on successful run.
+func RLockSetter(c *LockData) bool {
 
 	err := RConn.HMSet(c.Type+":"+c.Name, map[string]any{
 		"state":   c.State,
@@ -160,13 +166,17 @@ func RScanKeys(matchPattern string) []string {
 	return keys
 }
 
-func RFillJsonStats(r *StatsType) {
+func RFillJsonStats(r *Stats) {
 
 	envs := RScanKeys(C_TYPE_ENV)
 	envPrefixLen := len(C_TYPE_ENV) + 1
 	hostPrefixLen := len(C_TYPE_HOST) + 1
 
 	for _, key := range envs {
+
+		var envName string
+		var lockingUser string
+
 		result, err := RConn.HGetAll(key).Result()
 		if err != nil {
 			fmt.Printf("Error fetching data for key %s: %s\n", key, err)
@@ -180,17 +190,28 @@ func RFillJsonStats(r *StatsType) {
 				r.ValidEnvs = append(r.ValidEnvs, key[envPrefixLen:])
 			case field == "state" && value == C_STATE_LOCKED:
 				r.LockedEnvs = append(r.LockedEnvs, key[envPrefixLen:])
+				envName = key[envPrefixLen:]
 			case field == "state" && value == C_STATE_MAINTENANCE:
 				r.MaintEnvs = append(r.MaintEnvs, key[envPrefixLen:])
 			case field == "state" && value == C_STATE_TERMINATED:
 				r.TermdEnvs = append(r.TermdEnvs, key[envPrefixLen:])
+			case field == "user":
+				lockingUser = value
 			}
+		}
+		if len(lockingUser) > 0 {
+			h := envName + " (" + lockingUser + ")"
+			r.LockedEnvs = append(r.LockedEnvs, h)
 		}
 	}
 
 	hosts := RScanKeys(C_TYPE_HOST)
 
 	for _, key := range hosts {
+
+		var hostName string
+		var lockingUser string
+
 		result, err := RConn.HGetAll(key).Result()
 		if err != nil {
 			fmt.Printf("Error fetching data for key %s: %s\n", key, err)
@@ -201,8 +222,13 @@ func RFillJsonStats(r *StatsType) {
 
 			switch {
 			case field == "state" && value == C_STATE_LOCKED:
-				r.LockedHosts = append(r.LockedHosts, key[hostPrefixLen:])
+				hostName = key[hostPrefixLen:]
+			case field == "user":
+				lockingUser = value
 			}
 		}
+
+		h := hostName + " (" + lockingUser + ")"
+		r.LockedHosts = append(r.LockedHosts, h)
 	}
 }
