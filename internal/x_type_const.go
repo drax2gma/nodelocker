@@ -30,7 +30,7 @@ type Stats struct {
 	LockedHosts []string `json:"lockedhosts"`
 }
 
-type ErrorCheckType struct {
+type RichErrorStatus struct {
 	IsError      bool
 	HttpErrCode  int
 	ErrorMessage string

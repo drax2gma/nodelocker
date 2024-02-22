@@ -145,11 +145,11 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check 'type' defined in GET request
-	t := x.CheckType(c.Type)
+	t := x.ValidateType(c.Type)
 	if t.IsError {
 
-		c.HttpErr = http.StatusBadRequest
-		res.Messages = append(res.Messages, x.ERR_WrongTypeSpecified)
+		c.HttpErr = t.HttpErrCode
+		res.Messages = append(res.Messages, t.ErrorMessage)
 	}
 
 	// no 'name' defined in GET request
@@ -190,6 +190,11 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 			x.HostLock(c, res)
 		default:
 		}
+
+		if !x.ExpireEntity(c.Type+":"+c.Name, c.LastDay) {
+			c.HttpErr = http.StatusBadRequest
+			res.Messages = append(res.Messages, x.ERR_InvalidDateSpecified)
+		}
 	}
 
 	returnWebResponse(w, c.HttpErr, res)
@@ -215,7 +220,7 @@ func unlockHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check 'type' defined in GET request
-	t := x.CheckType(c.Type)
+	t := x.ValidateType(c.Type)
 	if t.IsError {
 
 		c.HttpErr = http.StatusBadRequest

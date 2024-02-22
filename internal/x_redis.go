@@ -172,10 +172,11 @@ func RFillJsonStats(r *Stats) {
 	envPrefixLen := len(C_TYPE_ENV) + 1
 	hostPrefixLen := len(C_TYPE_HOST) + 1
 
-	for _, key := range envs {
+	for _, key := range envs { // environment data
 
 		var envName string
 		var lockingUser string
+		var lastDay string
 
 		result, err := RConn.HGetAll(key).Result()
 		if err != nil {
@@ -189,28 +190,30 @@ func RFillJsonStats(r *Stats) {
 			case field == "state" && value == C_STATE_VALID:
 				r.ValidEnvs = append(r.ValidEnvs, key[envPrefixLen:])
 			case field == "state" && value == C_STATE_LOCKED:
-				r.LockedEnvs = append(r.LockedEnvs, key[envPrefixLen:])
 				envName = key[envPrefixLen:]
+				if len(lockingUser) > 0 {
+					h := envName + " (👤" + lockingUser + "   📅" + lastDay + ")"
+					r.LockedEnvs = append(r.LockedEnvs, h)
+				}
 			case field == "state" && value == C_STATE_MAINTENANCE:
 				r.MaintEnvs = append(r.MaintEnvs, key[envPrefixLen:])
 			case field == "state" && value == C_STATE_TERMINATED:
 				r.TermdEnvs = append(r.TermdEnvs, key[envPrefixLen:])
 			case field == "user":
 				lockingUser = value
+			case field == "lastday":
+				lastDay = value
 			}
-		}
-		if len(lockingUser) > 0 {
-			h := envName + " (" + lockingUser + ")"
-			r.LockedEnvs = append(r.LockedEnvs, h)
 		}
 	}
 
 	hosts := RScanKeys(C_TYPE_HOST)
 
-	for _, key := range hosts {
+	for _, key := range hosts { // host data
 
 		var hostName string
 		var lockingUser string
+		var lastDay string
 
 		result, err := RConn.HGetAll(key).Result()
 		if err != nil {
@@ -225,10 +228,12 @@ func RFillJsonStats(r *Stats) {
 				hostName = key[hostPrefixLen:]
 			case field == "user":
 				lockingUser = value
+			case field == "lastday":
+				lastDay = value
 			}
 		}
 
-		h := hostName + " (" + lockingUser + ")"
+		h := hostName + " (👤" + lockingUser + "   📅" + lastDay + ")"
 		r.LockedHosts = append(r.LockedHosts, h)
 	}
 }

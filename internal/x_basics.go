@@ -120,12 +120,28 @@ func IsValidDate(dateParam string) bool {
 	return true
 }
 
+// Wants: `env|host:name` key in Redis, expire date in YYYYMMDD
+//
+// Returns: `true` on success
+func ExpireEntity(entity string, expireAt string) bool {
+
+	if !IsValidDate(expireAt) { //
+		return false
+	}
+
+	if !RSetExpire(entity, GetTimeFromNow(expireAt)) {
+		return false
+	}
+
+	return true
+}
+
 // Wants: a string which should be C_TYPE_ENV or C_TYPE_HOST
 //
-// Returns: Specific ErrorCheckType
-func CheckType(t string) *ErrorCheckType {
+// Returns: Specific RichErrorStatus
+func ValidateType(t string) *RichErrorStatus {
 
-	r := new(ErrorCheckType)
+	r := new(RichErrorStatus)
 
 	if t == C_TYPE_ENV || t == C_TYPE_HOST {
 
@@ -257,20 +273,21 @@ func EnvMaintenance(envName string) bool {
 func EnvTerminate(envName string) bool {
 
 	c := new(LockData)
+	c = RLockGetter(C_TYPE_ENV + ":" + envName)
 	c.Type = C_TYPE_ENV
 	c.Name = envName
-
-	c = RLockGetter(c.Type + ":" + c.Name)
 	c.State = C_STATE_TERMINATED
+	c.Parent = "n/a"
+	c.User = C_ADMIN
 	return RLockSetter(c)
 }
 
 // Wants: environment name
 //
-// Returns: Specific ErrorCheckType
-func EnvLockStatus(envName string) *ErrorCheckType {
+// Returns: Specific RichErrorStatus
+func EnvLockStatus(envName string) *RichErrorStatus {
 
-	r := new(ErrorCheckType)
+	r := new(RichErrorStatus)
 	ld := RLockGetter(C_TYPE_ENV + ":" + envName)
 
 	switch {
