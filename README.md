@@ -16,7 +16,7 @@ You can read more on ShellSpec format here: https://shellspec.info/
 Run the tests from the project directory with the following command:
 
 ```bash
-❯ `shellspec tests/`
+❯ shellspec tests/
 ```
 
 ## Running NodeLocker
@@ -51,7 +51,7 @@ General request format:
 ❯ echo "my beautiful password" | sha256sum | cut -d" " -f1
 ```
 
-The command will return something like this:
+The bash command will return something like this:
 
 ```bash
 5c8ccefbcb9f9a0ef8a8d40225fa2aceff4d6601dfc43bbb55fb01ee33b9cf8a
