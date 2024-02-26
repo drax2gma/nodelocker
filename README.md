@@ -130,7 +130,7 @@ Example:
 Except for the `stats` command, all other command needs a responsible user, which must be registered beforehand. Every user registers their user, no `admin` is needed for that.
 
 ```bash
-❯ https://localhost:3000/register?user=<username>&token=<new_user_token>
+❯ https://example.local:3000/register?user=<username>&token=<new_user_token>
 ```
 
 ### Locking hosts and environments
@@ -142,9 +142,9 @@ To own a host or an environment, it must be locked.
 Examples:
 
 ```bash
-❯ https://localhost:3000/lock?type=host&name=<hostname>&user=<username>&token=<user_token>&lastday=<expire_day>
+❯ https://example.local:3000/lock?type=host&name=<hostname>&user=<username>&token=<user_token>&lastday=<expire_day>
 
-❯ https://localhost:3000/lock?type=env&name=<envname>&user=<username>&token=<user_token>&lastday=<expore_day>
+❯ https://example.local:3000/lock?type=env&name=<envname>&user=<username>&token=<user_token>&lastday=<expore_day>
 ```
 
 ### Unlocking hosts and environments
@@ -156,9 +156,9 @@ Unlocking can be necessary sometimes before automatic unlocking happens, here is
 Examples:
 
 ```bash
-❯ https://localhost:3000/unlock?type=host&name=<hostname>&user=<username>&token=<user_token>
+❯ https://example.local:3000/unlock?type=host&name=<hostname>&user=<username>&token=<user_token>
 
-❯ https://localhost:3000/unlock?type=env&name=<envname>&user=<username>&token=<user_token>
+❯ https://example.local:3000/unlock?type=env&name=<envname>&user=<username>&token=<user_token>
 ```
 
 ### Status queries
@@ -171,13 +171,13 @@ Later YAML format will be added too.
 #### Web HTML format (human readable)
 
 ```bash
-❯ https://localhost:3000/status/web
+❯ https://example.local:3000/status/web
 ```
 
 #### JSON format
 
 ```bash
-❯ https://localhost:3000/status/json
+❯ https://example.local:3000/status/json
 ```
 
 ## Guarantees, responsibility
