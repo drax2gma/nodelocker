@@ -446,6 +446,7 @@ func main() {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
+	r.Use(x.RateLimitMiddleware) // Add rate limiting middleware
 
 	r.Get("/status/json", jsonStatHandler)
 	r.Get("/status/web", webStatHandler)
