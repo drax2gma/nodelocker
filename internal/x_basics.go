@@ -194,7 +194,6 @@ func IsExistingUser(userName string) bool {
 //
 // Returns: `true` if user is valid (password is matching)
 func IsValidUser(userName string, userToken string) bool {
-
 	if DEBUG {
 		fmt.Println("IsValidUser <<", userName)
 	}
@@ -203,8 +202,13 @@ func IsValidUser(userName string, userToken string) bool {
 
 	if err == nil && len(redisPwd) > 0 {
 		// found user & password
-
-		if redisPwd == CryptString(userToken) {
+		if CheckPassword(userToken, redisPwd) {
+			// If using old hash format, upgrade to bcrypt
+			if NeedsUpgrade(redisPwd) {
+				if newHash, err := HashPassword(userToken); err == nil {
+					RSetSingle("user", userName, newHash, 0)
+				}
+			}
 			if DEBUG {
 				fmt.Println("IsValidUser >>", true)
 			}

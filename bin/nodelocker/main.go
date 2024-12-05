@@ -296,7 +296,14 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 	// now error till this point, let's register the new user
 	if c.HttpErr == x.C_HTTP_OK {
 
-		if !x.RSetSingle("user", c.User, x.CryptString(c.Token), 0) {
+		hashedPassword, err := x.HashPassword(c.Token)
+		if err != nil {
+			c.HttpErr = http.StatusInternalServerError
+			res.Messages = append(res.Messages, "Error hashing password")
+			return
+		}
+
+		if !x.RSetSingle("user", c.User, hashedPassword, 0) {
 
 			c.HttpErr = http.StatusInternalServerError
 			res.Messages = append(res.Messages, x.ERR_UserSetupFailed)
