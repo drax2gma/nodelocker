@@ -3,22 +3,26 @@
 ## 🚨 CRITICAL PRIORITY (Immediate Action Required)
 
 ### Security - Must Fix Before Production
-- [ ] **URGENT: Move TLS certificates to secure storage**
+
+- [x] **URGENT: Move TLS certificates to secure storage**
+
   - Priority: Critical
   - Impact: Production security breach
-  - Details: Current `/dev/shm` storage is temporary and insecure - certificates lost on reboot
-  - Status: NOT IMPLEMENTED
+  - Details: Changed from `/dev/shm` to `/var/lib/nodelocker/certs/` with automatic directory creation
+  - Status: COMPLETED
 
-- [ ] **URGENT: Complete password hashing migration**
+- [x] **URGENT: Complete password hashing migration**
   - Priority: Critical
   - Impact: Password security vulnerability
-  - Details: Bcrypt support exists but SHA1 still used for new hashes - need to force bcrypt for all new registrations
-  - Status: PARTIALLY IMPLEMENTED (upgrade mechanism exists, but not enforced)
+  - Details: Bcrypt is already used for all new registrations. Legacy SHA1 passwords are automatically upgraded on login. Removed unused SHA1 CryptString function.
+  - Status: COMPLETED
 
 ## 🔴 HIGH PRIORITY (Next Sprint)
 
 ### Security Improvements
+
 - [x] Implement rate limiting for API endpoints
+
   - Priority: High
   - Impact: Protection against brute force attacks
   - Details: Rate limiting middleware implemented with Redis backend
@@ -31,13 +35,16 @@
   - Status: NOT IMPLEMENTED
 
 ### Code Quality
+
 - [ ] Implement proper error handling
+
   - Priority: High
   - Impact: Reliability and debugging
   - Details: Remove `trunk-ignore` directives and handle all errors properly
   - Status: NOT IMPLEMENTED
 
 - [ ] Implement configuration management
+
   - Priority: High
   - Impact: Deployment flexibility
   - Details: Add support for config files and environment variables (Redis URL, port, TLS settings)
@@ -50,7 +57,9 @@
   - Status: NOT IMPLEMENTED
 
 ### Testing
+
 - [ ] Add unit tests for core functionality
+
   - Priority: High
   - Impact: Code reliability
   - Details: Test password hashing, validation, Redis operations
@@ -63,6 +72,7 @@
   - Status: NOT IMPLEMENTED
 
 ### Documentation
+
 - [ ] Add API documentation
   - Priority: High
   - Impact: Developer experience
@@ -72,7 +82,9 @@
 ## 🟡 MEDIUM PRIORITY (Following Sprints)
 
 ### Code Quality
+
 - [ ] Add structured logging
+
   - Priority: Medium
   - Impact: Observability
   - Details: Replace fmt.Println with proper logging framework (logrus, zap)
@@ -85,13 +97,16 @@
   - Status: NOT IMPLEMENTED
 
 ### Documentation
+
 - [ ] Improve code documentation
+
   - Priority: Medium
   - Impact: Maintainability
   - Details: Add godoc comments for all exported functions
   - Status: PARTIALLY IMPLEMENTED (some functions documented)
 
 - [ ] Create deployment guide
+
   - Priority: Medium
   - Impact: Operations
   - Details: Document production deployment steps, systemd config, Docker setup
@@ -104,7 +119,9 @@
   - Status: NOT IMPLEMENTED
 
 ### Testing
+
 - [ ] Add API endpoint tests
+
   - Priority: Medium
   - Impact: API reliability
   - Details: Test all HTTP endpoints with various scenarios
@@ -117,6 +134,7 @@
   - Status: NOT IMPLEMENTED
 
 ### Operations
+
 - [ ] Add health check endpoints
   - Priority: Medium
   - Impact: Operations
@@ -126,7 +144,9 @@
 ## 🟢 LOW PRIORITY (Future Releases)
 
 ### Monitoring & Performance
+
 - [ ] Add metrics collection
+
   - Priority: Low
   - Impact: Monitoring
   - Details: Implement Prometheus metrics for requests, locks, errors
@@ -139,6 +159,7 @@
   - Status: NOT IMPLEMENTED
 
 ## ✅ COMPLETED ITEMS
+
 - Rate limiting middleware implemented with Redis backend
 - Bcrypt password support added (migration mechanism exists)
 - Basic TLS support with self-signed certificates

@@ -30,9 +30,10 @@ func jsonStatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", x.C_RespHeader)
-	/* trunk-ignore(golangci-lint/errcheck) */
-	w.Write(byteData)
+	if _, err := w.Write(byteData); err != nil {
+		http.Error(w, "Error writing response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func webStatHandler(w http.ResponseWriter, r *http.Request) {
@@ -183,12 +184,11 @@ func lockHandler(w http.ResponseWriter, r *http.Request) {
 	// on C_HTTP_OK lock
 	if c.HttpErr == x.C_HTTP_OK {
 
-		switch {
-		case c.Type == x.C_TYPE_ENV:
+		switch c.Type {
+		case x.C_TYPE_ENV:
 			x.EnvLock(c, res)
-		case c.Type == x.C_TYPE_HOST:
+		case x.C_TYPE_HOST:
 			x.HostLock(c, res)
-		default:
 		}
 
 		if !x.ExpireEntity(c.Type+":"+c.Name, c.LastDay) {
@@ -423,8 +423,10 @@ func returnWebResponse(w http.ResponseWriter, httpErr int, retData *x.WebRespons
 	w.Header().Set("Content-Type", x.C_RespHeader)
 	w.WriteHeader(httpErr)
 
-	/* trunk-ignore(golangci-lint/errcheck) */
-	w.Write(byteData)
+	if _, err := w.Write(byteData); err != nil {
+		http.Error(w, "Error writing response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func main() {

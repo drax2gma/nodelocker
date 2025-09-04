@@ -1,7 +1,6 @@
 package x
 
 import (
-	"crypto/sha1"
 	"fmt"
 	"log"
 	"net/http"
@@ -47,20 +46,19 @@ import (
 // 	return c
 // }
 
-// Wants: a plain string
+// DEPRECATED: This function is no longer used. Password hashing is now handled by HashPassword() in x_password.go
+// which uses bcrypt. This function remains for backward compatibility only.
+// func CryptString(plain string) string {
 //
-// Returns: sha1 hash of input string
-func CryptString(plain string) string {
-
-	const preSalt string = "68947b1f416c3a5655e1ff9e7c7935f6"
-	const postSalt string = "5f09dd9c81596ea3cc93ce0df58e26d8"
-
-	h := sha1.New()
-	h.Write([]byte(preSalt + plain + postSalt))
-	sha1Hash := h.Sum(nil)
-	hexString := fmt.Sprintf("%x", sha1Hash)
-	return hexString
-}
+// 	const preSalt string = "68947b1f416c3a5655e1ff9e7c7935f6"
+// 	const postSalt string = "5f09dd9c81596ea3cc93ce0df58e26d8"
+//
+// 	h := sha1.New()
+// 	h.Write([]byte(preSalt + plain + postSalt))
+// 	sha1Hash := h.Sum(nil)
+// 	hexString := fmt.Sprintf("%x", sha1Hash)
+// 	return hexString
+// }
 
 // Wants: a string containing a date in YYYYMMDD format
 //
@@ -143,22 +141,18 @@ func ValidateType(t string) *RichErrorStatus {
 
 	r := new(RichErrorStatus)
 
-	if t == C_TYPE_ENV || t == C_TYPE_HOST {
-
+	switch t {
+	case C_TYPE_ENV, C_TYPE_HOST:
 		r.IsError = false
 		r.HttpErrCode = C_HTTP_OK
 		r.ErrorMessage = ""
 		return r
-
-	} else if t == "" {
-
+	case "":
 		r.IsError = true
 		r.HttpErrCode = http.StatusBadRequest
 		r.ErrorMessage = ERR_NoTypeSpecified
 		return r
-
-	} else {
-
+	default:
 		r.IsError = true
 		r.HttpErrCode = http.StatusBadRequest
 		r.ErrorMessage = ERR_WrongTypeSpecified
@@ -276,8 +270,7 @@ func EnvMaintenance(envName string) bool {
 
 func EnvTerminate(envName string) bool {
 
-	c := new(LockData)
-	c = RLockGetter(C_TYPE_ENV + ":" + envName)
+	c := RLockGetter(C_TYPE_ENV + ":" + envName)
 	c.Type = C_TYPE_ENV
 	c.Name = envName
 	c.State = C_STATE_TERMINATED
@@ -371,11 +364,7 @@ func IsEnvContainsHosts(envName string) bool {
 
 func IsHostLocked(hostName string) bool {
 
-	c := new(LockData)
-	c.Type = C_TYPE_HOST
-	c.Name = hostName
-
-	c = RLockGetter(c.Type + ":" + c.Name)
+	c := RLockGetter(C_TYPE_HOST + ":" + hostName)
 	if c.State == C_STATE_LOCKED {
 		return false
 	} else {

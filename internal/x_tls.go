@@ -18,10 +18,15 @@ import (
 )
 
 const (
-	C_CERT_BASEPATH string = "/dev/shm/"
+	C_CERT_BASEPATH string = "/var/lib/nodelocker/certs/"
 )
 
 func generateCertificate() error {
+	// Ensure certificate directory exists
+	if err := os.MkdirAll(C_CERT_BASEPATH, 0700); err != nil {
+		return fmt.Errorf("failed to create certificate directory: %w", err)
+	}
+
 	// Generate a private key
 	privateKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
@@ -52,7 +57,11 @@ func generateCertificate() error {
 	if err != nil {
 		return err
 	}
-	defer keyFile.Close()
+	defer func() {
+		if err := keyFile.Close(); err != nil {
+			fmt.Printf("Error closing key file: %v\n", err)
+		}
+	}()
 
 	keyBytes, err := x509.MarshalECPrivateKey(privateKey)
 	if err != nil {
@@ -69,7 +78,11 @@ func generateCertificate() error {
 	if err != nil {
 		return err
 	}
-	defer certFile.Close()
+	defer func() {
+		if err := certFile.Close(); err != nil {
+			fmt.Printf("Error closing cert file: %v\n", err)
+		}
+	}()
 
 	err = pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 	if err != nil {
@@ -111,8 +124,9 @@ func ServeTLS(r *chi.Mux) {
 
 	// Configure the Chi router
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		/* trunk-ignore(golangci-lint/errcheck) */
-		w.Write([]byte("nodelocker"))
+		if _, err := w.Write([]byte("nodelocker")); err != nil {
+			fmt.Printf("Error writing response: %v\n", err)
+		}
 	})
 
 	// Create a server with TLS configuration
